@@ -19,6 +19,7 @@
 
   function render() {
     $('ftVersion').textContent = u.version ? `v${u.version}` : '';
+    $('brandVer').textContent = u.version ? `v${u.version}` : '';
     $('setVer').textContent = u.version ? `v${u.version}` : '';
     const ready = u.state === 'ready', busy = u.state === 'checking' || u.state === 'downloading';
     const ft = $('ftUpdate');

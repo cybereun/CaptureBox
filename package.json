@@ -1,7 +1,7 @@
 {
   "name": "capturebox",
   "productName": "CaptureBox",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "영역·창·전체·스크롤 캡처와 에셋 보관함",
   "main": "main.js",
   "scripts": {

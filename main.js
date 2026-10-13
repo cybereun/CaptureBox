@@ -220,7 +220,9 @@ ipcMain.on('overlay:cancel', () => finishPick && finishPick(null));
 /* ---------- 스크롤 캡처 ---------- */
 function startInput() {
   return new Promise((resolve, reject) => {
-    const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'input.ps1')], {
+    // 설치본에서는 app.asar 안의 파일을 PowerShell이 읽지 못하므로 압축 해제된 위치(app.asar.unpacked)를 쓴다.
+    const script = path.join(__dirname, 'input.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+    const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], {
       windowsHide: true,
     });
     let buf = '';
@@ -508,12 +510,13 @@ function createTray() {
 /* ---------- 앱 ---------- */
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 820, minHeight: 520, title: 'CaptureBox',
+    width: 1280, height: 800, minWidth: 820, minHeight: 520, title: `CaptureBox v${app.getVersion()}`,
     backgroundColor: '#14171f', autoHideMenuBar: true,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), sandbox: true },
   });
   win.removeMenu();
+  win.on('page-title-updated', (e) => e.preventDefault());   // 제목줄에 버전을 계속 표시
   win.on('close', (e) => {
     if (quitting || !tray) return;
     e.preventDefault();
