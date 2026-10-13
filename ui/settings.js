@@ -26,7 +26,7 @@
     ft.classList.toggle('ready', ready);
     ft.textContent = ready ? `⟳ v${u.latest} 업데이트` : `v${u.latest || ''} 다운로드 ${u.percent || 0}%`;
     ft.disabled = !ready;
-    $('ftStatus').textContent = u.state === 'error' || u.state === 'checking' ? label(u) : '';
+    $('ftStatus').textContent = ['error', 'checking', 'latest'].includes(u.state) ? label(u) : '';
     $('setUpd').textContent = label(u);
     $('setCheck').disabled = busy;
     $('setInstall').hidden = !ready;

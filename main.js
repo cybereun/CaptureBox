@@ -432,23 +432,33 @@ function friendlyError(e) {
   if (/\b(401|403)\b/.test(m)) return '릴리즈에 접근할 수 없습니다';
   return m.split(/\r?\n/)[0].slice(0, 80);
 }
+let lastCheck = 0;
+let startupRetries = 4;
 function checkUpdate() {
   if (!app.isPackaged || !updater) return sendUpdate({ state: 'dev' });
   if (['checking', 'downloading', 'ready'].includes(upd.state)) return;
+  lastCheck = Date.now();
   sendUpdate({ state: 'checking', message: '' });
-  updater.checkForUpdates().catch((e) => sendUpdate({ state: 'error', message: friendlyError(e) }));
+  updater.checkForUpdates().catch(() => { /* 'error' 이벤트에서 처리 */ });
 }
 function initUpdater() {
   if (!app.isPackaged || !updater) { upd.state = 'dev'; return; }
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = true;
   updater.on('update-available', (i) => sendUpdate({ state: 'downloading', latest: i.version, percent: 0 }));
-  updater.on('update-not-available', () => sendUpdate({ state: 'latest' }));
+  updater.on('update-not-available', () => { startupRetries = 0; sendUpdate({ state: 'latest' }); });
   updater.on('download-progress', (p) => sendUpdate({ state: 'downloading', percent: Math.round(p.percent) }));
-  updater.on('update-downloaded', (i) => sendUpdate({ state: 'ready', latest: i.version, notes: typeof i.releaseNotes === 'string' ? i.releaseNotes : '' }));
-  updater.on('error', (e) => sendUpdate({ state: 'error', message: friendlyError(e) }));
-  setTimeout(checkUpdate, 4000);
-  setInterval(checkUpdate, 30 * 60 * 1000);
+  updater.on('update-downloaded', (i) => { startupRetries = 0; sendUpdate({ state: 'ready', latest: i.version, notes: typeof i.releaseNotes === 'string' ? i.releaseNotes : '' }); });
+  updater.on('error', (e) => {
+    sendUpdate({ state: 'error', message: friendlyError(e) });
+    // 시작 직후 네트워크가 아직 준비되지 않았을 수 있어 몇 번 재시도한다.
+    if (startupRetries > 0) { startupRetries--; setTimeout(checkUpdate, 15000); }
+  });
+  // 앱이 뜨자마자 바로 확인 (창이 로드되면 즉시), 이후 3분마다·창을 다시 켤 때마다 확인
+  const first = () => setTimeout(checkUpdate, 500);
+  if (win && !win.webContents.isLoading()) first(); else if (win) win.webContents.once('did-finish-load', first);
+  setInterval(checkUpdate, 3 * 60 * 1000);
+  if (win) win.on('focus', () => { if (Date.now() - lastCheck > 60 * 1000) checkUpdate(); });
 }
 ipcMain.handle('store:get', () => storeInfo());
 ipcMain.handle('store:choose', async () => {
