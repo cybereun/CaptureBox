@@ -1,7 +1,7 @@
 'use strict';
 const {
   app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard, nativeImage,
-  dialog, globalShortcut, shell, ClipboardItem,
+  dialog, globalShortcut, shell, ClipboardItem, Tray, Menu,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -182,15 +182,17 @@ function pickRegion(mode) {
       const w = new BrowserWindow({
         x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height,
         frame: false, resizable: false, movable: false, skipTaskbar: true, alwaysOnTop: true,
-        fullscreenable: false, show: false, enableLargerThanScreen: true, backgroundColor: '#000',
+        fullscreenable: false, show: false, enableLargerThanScreen: true,
+        transparent: true, backgroundColor: '#00000000',   // 이미지가 그려지기 전 첫 프레임이 검게 번쩍이지 않도록 투명
         webPreferences: { preload: path.join(__dirname, 'ui', 'overlay-preload.js'), sandbox: true },
       });
       w.setAlwaysOnTop(true, 'screen-saver');
       w.setBounds(d.bounds);
-      overlayCtx.set(w.webContents.id, { display: d, shot: shots[i] });
+      overlayCtx.set(w.webContents.id, { display: d, shot: shots[i], win: w });
       w.loadFile(path.join(__dirname, 'ui', 'overlay.html'));
       w.webContents.once('did-finish-load', () => {
-        w.webContents.send('overlay:init', { shot: shots[i].toDataURL(), mode });
+        // JPEG가 PNG보다 훨씬 빨리 인코딩된다(표시용).
+        w.webContents.send('overlay:init', { shot: 'data:image/jpeg;base64,' + shots[i].toJPEG(92).toString('base64'), mode });
         w.show();
         w.focus();
       });
@@ -478,6 +480,31 @@ ipcMain.handle('update:get', () => upd);
 ipcMain.handle('update:check', () => checkUpdate());
 ipcMain.handle('update:install', () => { if (updater && upd.state === 'ready') updater.quitAndInstall(true, true); });
 
+/* ---------- 트레이 상주 ---------- */
+let tray = null;
+let quitting = false;
+function showWin() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 32, height: 32 });
+  tray = new Tray(icon);
+  tray.setToolTip('CaptureBox');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'CaptureBox 열기', click: showWin },
+    { type: 'separator' },
+    { label: '영역 캡처   Ctrl+Alt+1', click: () => runCapture('region', 0) },
+    { label: '전체 화면 캡처   Ctrl+Alt+2', click: () => runCapture('fullscreen', 0) },
+    { label: '스크롤 캡처   Ctrl+Alt+3', click: () => runCapture('scroll', 0) },
+    { type: 'separator' },
+    { label: '종료', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWin);
+}
+
 /* ---------- 앱 ---------- */
 function createWindow() {
   win = new BrowserWindow({
@@ -487,16 +514,29 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), sandbox: true },
   });
   win.removeMenu();
+  win.on('close', (e) => {
+    if (quitting || !tray) return;
+    e.preventDefault();
+    win.hide();
+    if (!settings.trayNoticeShown) {
+      settings.trayNoticeShown = true;
+      saveSettings();
+      try { tray.displayBalloon({ title: 'CaptureBox', content: '트레이에서 계속 실행 중입니다. 단축키로 바로 캡처할 수 있어요. 완전히 종료하려면 트레이 아이콘을 우클릭하세요.' }); } catch { /* 무시 */ }
+    }
+  });
+  win.on('session-end', () => { quitting = true; });
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
 }
 
 app.whenReady().then(() => {
   initStore();
   createWindow();
+  createTray();
   initUpdater();
   const hk = { 'CommandOrControl+Alt+1': 'region', 'CommandOrControl+Alt+2': 'fullscreen', 'CommandOrControl+Alt+3': 'scroll' };
   for (const [key, mode] of Object.entries(hk)) globalShortcut.register(key, () => runCapture(mode, 0));
 });
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
+app.on('second-instance', showWin);
+app.on('before-quit', () => { quitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
-app.on('window-all-closed', () => { if (!busy) app.quit(); });
+app.on('window-all-closed', () => { if (!tray && !busy) app.quit(); });
