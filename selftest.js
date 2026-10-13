@@ -59,7 +59,10 @@ exports.run = async (ctx) => {
     const upd = path.join(process.resourcesPath, 'app-update.yml');
     if (!fs.existsSync(upd)) throw new Error('app-update.yml 없음 (자동 업데이트 설정 누락)');
     if (!fs.existsSync(ctx.unpackedPath('input.ps1')) || !fs.existsSync(ctx.unpackedPath('ocr.ps1'))) throw new Error('app.asar.unpacked 에 PowerShell 스크립트가 없습니다');
-    return 'app-update.yml · 스크립트 unpacked OK';
+    const bind = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'win32', 'x64', 'onnxruntime_binding.node');
+    if (!fs.existsSync(bind)) throw new Error('onnxruntime-node 네이티브 모듈이 unpacked 에 없습니다 (정밀 OCR 불가)');
+    for (const f of ['det.onnx', 'rec_korean.onnx', 'rec_korean.yml']) if (!fs.existsSync(path.join(ctx.ocrModelDir(), f))) throw new Error(`OCR 모델 파일 없음: ${f}`);
+    return 'app-update.yml · 스크립트·onnxruntime unpacked · OCR 모델 3개 OK';
   });
 
   await step('트레이 아이콘', () => { if (!ctx.tray || ctx.tray.isDestroyed()) throw new Error('트레이가 만들어지지 않았습니다'); return 'OK'; });
@@ -155,28 +158,79 @@ exports.run = async (ctx) => {
         return nativeImage.createFromDataURL(url);
       } finally { w.destroy(); }
     };
-    await step('글자 인식(OCR): 영어·숫자', async () => {
+    await step('정밀 OCR 엔진 로드 (onnxruntime + 모델)', async () => {
+      const t0 = Date.now();
+      await ctx.getPrecise();
+      return `${Date.now() - t0}ms`;
+    });
+    const precise = async (img) => {
+      const r = await ctx.ocrImage(img, 'precise');
+      if (r.engine !== 'precise') throw new Error(`정밀 엔진이 쓰이지 않고 대체되었습니다: ${r.note}`);
+      return r.text;
+    };
+    await step('정밀 OCR: 영어·숫자', async () => {
       const img = await makeTextImage(260, "x.fillText('CaptureBox OCR 12345', 40, 40);x.fillText('Hello World 2026', 40, 140)");
-      const t = await ctx.ocrImage(img);
+      const t = await precise(img);
       const low = t.replace(/\s+/g, '').toLowerCase();
-      if (!low.includes('capturebox') || !low.includes('12345')) throw new Error(`인식 결과가 다릅니다: "${t.slice(0, 80)}"`);
-      return `"${t.split('\n')[0]}"`;
+      if (!low.includes('capturebox') || !low.includes('ocr12345') || !low.includes('helloworld2026')) throw new Error(`인식 결과가 다릅니다: "${t.slice(0, 80)}"`);
+      return `"${t.split('\n').join(' / ')}"`;
     });
-    await step('글자 인식(OCR): 한국어', async () => {
+    await step('정밀 OCR: 한국어 (두 줄 모두 정확해야 함)', async () => {
       const img = await makeTextImage(260, "x.fillText('캡처박스 글자 인식 테스트', 40, 40);x.fillText('안녕하세요 반갑습니다', 40, 140)");
-      const t = await ctx.ocrImage(img);
+      const t = await precise(img);
       const low = t.replace(/\s+/g, '');
-      if (!low.includes('캡처박스') && !low.includes('안녕하세요')) {
-        return { status: 'fail', detail: `한국어 인식 결과가 다릅니다: "${t.slice(0, 80)}"` };
-      }
-      return `"${t.split('\n')[0]}"`;
+      if (!low.includes('캡처박스글자인식테스트') || !low.includes('안녕하세요반갑습니다')) throw new Error(`한국어 인식 결과가 다릅니다: "${t.slice(0, 80)}"`);
+      if (t.split('\n').length !== 2) throw new Error(`줄바꿈이 보존되지 않았습니다 (${t.split('\n').length}줄)`);
+      return `"${t.split('\n').join(' / ')}"`;
     });
-    await step('글자 인식(OCR): 긴 이미지 분할 인식 (4200px)', async () => {
-      const img = await makeTextImage(4200, "x.fillText('FIRST LINE 111', 40, 60);x.fillText('LAST LINE 999', 40, 4000)");
-      const t = await ctx.ocrImage(img);
+    await step('정밀 OCR: 긴 이미지 분할 인식 (4200px)', async () => {
+      const img = await makeTextImage(4200, "x.fillText('FIRST LINE 111', 40, 60);x.fillText('MIDDLE LINE 555', 40, 2100);x.fillText('LAST LINE 999', 40, 4000)");
+      const t = await precise(img);
       const low = t.replace(/\s+/g, '').toLowerCase();
-      if (!low.includes('firstline') || !low.includes('lastline')) throw new Error(`위/아래 글자를 모두 읽지 못했습니다: "${t.slice(0, 80)}"`);
-      return '맨 위·맨 아래 글자 모두 인식';
+      if (!low.includes('firstline111') || !low.includes('middleline555') || !low.includes('lastline999')) throw new Error(`위·중간·아래 글자를 모두 읽지 못했습니다: "${t.slice(0, 100)}"`);
+      return '맨 위·중간·맨 아래 글자 모두 인식 (타일 경계에서 글자가 잘리지 않음)';
+    });
+    await step('OCR 버튼 경로(IPC): 에셋 → 정밀 인식 → 클립보드 복사', async () => {
+      const img = await makeTextImage(260, "x.fillText('버튼 경로 테스트 ABC 123', 40, 40);x.fillText('두 번째 줄입니다', 40, 140)");
+      const a = ctx.addAsset(img, 'edit');
+      const r = await H('asset:ocr', a.id);
+      if (!r.ok || r.engine !== 'precise') throw new Error(`결과: ok=${r.ok} engine=${r.engine} ${r.message || r.note || ''}`);
+      const raw = require('electron').clipboard.readText();
+      const clip = raw && typeof raw.then === 'function' ? await raw : raw;   // Electron 44 에서는 비동기일 수 있다
+      if (clip !== r.text) throw new Error(`클립보드 불일치: readText 반환형=${raw && raw.then ? 'Promise' : typeof raw}, 읽은 값="${String(clip).slice(0, 40)}", 기대="${r.text.slice(0, 40)}"`);
+      if (!r.text.replace(/\s+/g, '').includes('버튼경로테스트ABC123')) throw new Error(`인식 결과가 다릅니다: "${r.text}"`);
+      return `"${r.text.split('\n').join(' / ')}" → 클립보드 OK`;
+    });
+    await step('OCR 방식 설정(IPC): 정밀(기본) ↔ Windows 내장', async () => {
+      const d = await H('ocr:get');
+      if (d.mode !== 'precise' || !d.preciseAvailable) throw new Error(`기본값이 정밀이 아닙니다: ${JSON.stringify(d)}`);
+      const w = await H('ocr:set', 'windows');
+      const img = await makeTextImage(200, "x.fillText('Windows Mode 777', 40, 60)");
+      const rw = await ctx.ocrImage(img);
+      await H('ocr:set', 'precise');
+      if (w.mode !== 'windows' || rw.engine !== 'windows') throw new Error(`windows 설정이 반영되지 않았습니다 (${w.mode}, ${rw.engine})`);
+      const rp = await ctx.ocrImage(img);
+      if (rp.engine !== 'precise') throw new Error('정밀로 되돌리지 못했습니다');
+      return '기본=정밀, 전환 OK';
+    });
+    await step('정밀 모드 불가 시 Windows OCR 로 자동 대체 (모델 파일 없음 → 복구)', async () => {
+      const dir = ctx.ocrModelDir(), off = dir + '_off';
+      const img = await makeTextImage(200, "x.fillText('Fallback Test 4242', 40, 60)");
+      ctx.resetPrecise();
+      fs.renameSync(dir, off);
+      let r;
+      try { r = await ctx.ocrImage(img, 'precise'); } finally { fs.renameSync(off, dir); ctx.resetPrecise(); }
+      if (r.engine !== 'windows' || !r.note || !r.text.replace(/\s+/g, '').toLowerCase().includes('fallbacktest')) throw new Error(`대체 결과가 이상합니다: engine=${r.engine} note=${r.note} text="${r.text}"`);
+      const back = await ctx.ocrImage(img, 'precise');
+      if (back.engine !== 'precise') throw new Error('모델 복구 후 정밀 모드로 돌아오지 못했습니다');
+      return `대체 OK ("${r.note.slice(0, 40)}…") · 복구 후 정밀 재개`;
+    });
+    await step('Windows OCR(대체 수단) 동작', async () => {
+      const img = await makeTextImage(260, "x.fillText('CaptureBox OCR 12345', 40, 40);x.fillText('Hello World 2026', 40, 140)");
+      const r = await ctx.ocrImage(img, 'windows');
+      const low = r.text.replace(/\s+/g, '').toLowerCase();
+      if (r.engine !== 'windows' || !low.includes('capturebox')) throw new Error(`인식 결과가 다릅니다: "${r.text.slice(0, 80)}"`);
+      return `"${r.text.split('\n')[0]}"`;
     });
 
     // 핀

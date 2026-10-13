@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('snap', {
   getLogin: () => ipcRenderer.invoke('login:get'),
   setLogin: (on) => ipcRenderer.invoke('login:set', on),
   ocr: (id) => ipcRenderer.invoke('asset:ocr', id),
+  getOcrMode: () => ipcRenderer.invoke('ocr:get'),
+  setOcrMode: (m) => ipcRenderer.invoke('ocr:set', m),
   copyText: (t) => ipcRenderer.invoke('text:copy', t),
   pin: (id) => ipcRenderer.invoke('asset:pin', id),
   reveal: (id) => ipcRenderer.invoke('asset:reveal', id),

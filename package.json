@@ -1,7 +1,7 @@
 {
   "name": "capturebox",
   "productName": "CaptureBox",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "영역·창·전체·스크롤 캡처와 에셋 보관함",
   "main": "main.js",
   "scripts": {
@@ -9,11 +9,14 @@
     "test": "node test/stitch.test.js",
     "dist": "electron-builder --win --publish never",
     "release": "electron-builder --win --publish always",
-    "verify": "node scripts/verify.js"
+    "verify": "node scripts/verify.js",
+    "models": "node scripts/fetch-models.js",
+    "predist": "node scripts/fetch-models.js"
   },
   "license": "MIT",
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "onnxruntime-node": "^1.30.0"
   },
   "devDependencies": {
     "electron": "^44.7.0",
@@ -33,13 +36,21 @@
       "input.ps1",
       "selftest.js",
       "ocr.ps1",
+      "ppocr.js",
       "ui/**",
       "assets/**",
-      "package.json"
+      "package.json",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/x64/DirectML.dll",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/x64/dxcompiler.dll",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/x64/dxil.dll"
     ],
     "asarUnpack": [
       "input.ps1",
-      "ocr.ps1"
+      "ocr.ps1",
+      "node_modules/onnxruntime-node/**"
     ],
     "win": {
       "target": "nsis",
@@ -56,6 +67,15 @@
         "provider": "github",
         "owner": "cybereun",
         "repo": "CaptureBox"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "models",
+        "to": "models",
+        "filter": [
+          "ppocr/**"
+        ]
       }
     ]
   }

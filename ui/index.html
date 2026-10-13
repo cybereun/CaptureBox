@@ -289,8 +289,6 @@
     </div>
     <div id="viewer" hidden>
       <div class="bar">
-        <input id="name" spellcheck="false" aria-label="에셋 이름">
-        <span id="meta"></span>
         <div class="actions">
           <button id="fit">100%</button>
           <span id="zoomLabel" title="Ctrl+휠로 확대/축소"></span>
@@ -315,6 +313,10 @@
 </main>
 
 <footer id="footer">
+  <span id="ftAsset" hidden>
+    <input id="name" spellcheck="false" aria-label="에셋 이름" title="이름을 눌러 바꿀 수 있어요">
+    <span id="meta"></span>
+  </span>
   <span id="ftStatus"></span>
   <span class="grow"></span>
   <button id="ftUpdate" class="upd" hidden></button>
@@ -365,6 +367,10 @@
           <label class="chk"><input type="checkbox" id="optLogin"> <b>윈도우 시작 시 자동 실행</b></label>
           <p class="hint">컴퓨터를 켤 때 CaptureBox가 창 없이 트레이로 시작해서, 바로 단축키로 캡처할 수 있습니다.</p>
           <p id="loginMsg" class="hint err"></p>
+          <h4 class="sub">글자 인식 방식</h4>
+          <label class="radio"><input type="radio" name="ocrMode" value="precise"> <b>정밀 모드</b> (기본) — PP-OCRv5 한국어. 작은 글자와 한글을 훨씬 정확하게 읽습니다. 이미지당 약 0.5~2초.</label>
+          <label class="radio"><input type="radio" name="ocrMode" value="windows"> <b>Windows 내장</b> — 빠르지만 정확도가 낮습니다. 정밀 모드를 쓸 수 없을 때 자동으로 대신 쓰입니다.</label>
+          <p id="ocrModeMsg" class="hint err"></p>
         </section>
         <section id="pUpdate" class="spane" hidden>
           <h3>업데이트</h3>

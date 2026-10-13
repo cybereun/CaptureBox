@@ -276,6 +276,7 @@ async function scrollCapture(sel) {
     const target = 0.6 * first.height;
     let notches = 2;
     let step = 0;
+    let nudges = 0;
 
     for (let guard = 0; guard < 120; guard++) {
       await input.send(`wheel ${-notches}`);
@@ -286,6 +287,14 @@ async function scrollCapture(sel) {
         for (let k = 0; k < 3 && r.status === 'end'; k++) {
           await sleep(700);
           r = st.add(await grabCrop());
+        }
+        // 아직 한 번도 스크롤되지 않았다면 첫 휠이 창에 전달되지 않았을 수 있다 — 커서를 살짝 흔들어 다시 시도한다
+        if (r.status === 'end' && step === 0 && nudges < 2) {
+          nudges++;
+          await input.send(`move ${Math.round(center.x) + 2} ${Math.round(center.y) + 2}`);
+          await input.send(`move ${Math.round(center.x)} ${Math.round(center.y)}`);
+          await sleep(300);
+          continue;
         }
         if (r.status === 'end') break;
       }
@@ -504,8 +513,9 @@ function runPowerShell(script, args, timeoutMs) {
     });
   });
 }
+// ── Windows 내장 OCR: 설치가 필요 없고 빠르지만, 작은 글자·한글에서 정확도가 떨어진다 (대체 수단)
 // 긴 이미지(스크롤 캡처)는 세로로 나눠서 인식한다. OCR 엔진의 한 변 한도는 10000px.
-async function ocrImage(img) {
+async function ocrWindows(img) {
   let src = img;
   let { width, height } = src.getSize();
   if (width > 9000) { src = src.resize({ width: 9000 }); ({ width, height } = src.getSize()); }
@@ -526,14 +536,92 @@ async function ocrImage(img) {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 무시 */ }
   }
 }
+
+// ── 정밀 OCR (PP-OCRv5 한국어, ONNX Runtime CPU). 기본 방식이며, 쓸 수 없으면 Windows OCR 로 대체한다.
+const ocrModelDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'models', 'ppocr') : path.join(__dirname, 'models', 'ppocr'));
+let preciseEngine = null;
+let preciseQueue = Promise.resolve();
+function getPrecise() {
+  if (!preciseEngine) {
+    preciseEngine = (async () => {
+      const dir = ocrModelDir();
+      for (const f of ['det.onnx', 'rec_korean.onnx', 'rec_korean.yml']) {
+        if (!fs.existsSync(path.join(dir, f))) throw new Error(`정밀 모드 모델 파일이 없습니다 (${f}). 개발 중이면 npm run models 를 실행하세요`);
+      }
+      const ort = require('onnxruntime-node');
+      return require('./ppocr').PpOcr.create({ modelDir: dir, ort });
+    })().catch((e) => { preciseEngine = null; throw e; });
+  }
+  return preciseEngine;
+}
+const preciseStatus = () => {
+  const dir = ocrModelDir();
+  return ['det.onnx', 'rec_korean.onnx', 'rec_korean.yml'].every((f) => fs.existsSync(path.join(dir, f)));
+};
+// 긴 이미지는 세로로 잘라 인식한다. 자르는 위치는 배경만 있는 가로줄(글자를 가르지 않도록)에서 고른다.
+function pickCut(img, y0, want, width) {
+  const search = Math.min(220, Math.floor(want / 4));
+  const from = y0 + want - search;
+  const strip = img.crop({ x: 0, y: from, width, height: search }).toBitmap();   // BGRA
+  let bestRow = search - 1, bestVar = Infinity;
+  for (let r = search - 1; r >= 0; r--) {
+    let mn = 255, mx = 0;
+    for (let x = 0; x < width; x += 4) {
+      const o = (r * width + x) * 4;
+      const g = (strip[o] + strip[o + 1] + strip[o + 2]) / 3;
+      if (g < mn) mn = g; if (g > mx) mx = g;
+    }
+    if (mx - mn < bestVar) { bestVar = mx - mn; bestRow = r; }
+    if (bestVar < 6) break;
+  }
+  return from + bestRow + 1 - y0;
+}
+async function ocrPrecise(img) {
+  const run = async () => {
+    const eng = await getPrecise();
+    const { width, height } = img.getSize();
+    const TILE = Math.max(1600, Math.min(2600, width));
+    const parts = [];
+    for (let y = 0; y < height;) {
+      let h = Math.min(TILE, height - y);
+      if (height - y > TILE * 1.15) h = pickCut(img, y, TILE, width); else h = height - y;
+      const tile = y === 0 && h === height ? img : img.crop({ x: 0, y, width, height: h });
+      const r = await eng.recognize({ data: tile.toBitmap(), width, height: h, bgra: true });
+      if (r.text) parts.push(r.text);
+      y += h;
+    }
+    return parts.join('\n').trim();
+  };
+  const p = preciseQueue.then(run, run);   // 한 번에 하나씩 (CPU·메모리 폭주 방지)
+  preciseQueue = p.catch(() => {});
+  return p;
+}
+
+/** mode: 'precise' | 'windows' (생략하면 설정값, 기본 정밀). 정밀이 실패하면 Windows OCR 로 대체한다 */
+async function ocrImage(img, mode) {
+  const want = mode || settings.ocrMode || 'precise';
+  if (want === 'precise') {
+    try { return { text: await ocrPrecise(img), engine: 'precise', note: '' }; } catch (e) {
+      const note = `정밀 모드를 쓸 수 없어 Windows OCR 로 대체했습니다 (${String(e.message).split('\n')[0].slice(0, 120)})`;
+      return { text: await ocrWindows(img), engine: 'windows', note };
+    }
+  }
+  return { text: await ocrWindows(img), engine: 'windows', note: '' };
+}
 ipcMain.handle('asset:ocr', async (_e, id) => {
   if (!findAsset(id)) return { ok: false, message: '이미지를 찾을 수 없습니다' };
   try {
-    const text = await ocrImage(nativeImage.createFromPath(imgPath(id)));
-    if (!text) return { ok: true, text: '', message: '인식된 글자가 없습니다' };
-    clipboard.writeText(text);
-    return { ok: true, text };
+    const r = await ocrImage(nativeImage.createFromPath(imgPath(id)));
+    if (!r.text) return { ok: true, text: '', engine: r.engine, message: '인식된 글자가 없습니다' };
+    clipboard.writeText(r.text);
+    return { ok: true, text: r.text, engine: r.engine, note: r.note };
   } catch (e) { return { ok: false, message: e.message }; }
+});
+ipcMain.handle('ocr:get', () => ({ mode: settings.ocrMode || 'precise', preciseAvailable: preciseStatus() }));
+ipcMain.handle('ocr:set', (_e, mode) => {
+  settings.ocrMode = mode === 'windows' ? 'windows' : 'precise';
+  saveSettings();
+  return { mode: settings.ocrMode, preciseAvailable: preciseStatus() };
 });
 ipcMain.handle('text:copy', (_e, text) => { clipboard.writeText(String(text || '')); return true; });
 
@@ -716,7 +804,7 @@ app.whenReady().then(() => {
     setTimeout(() => require('./selftest').run({
       app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path,
       get win() { return win; }, get tray() { return tray; }, get assets() { return assets; },
-      pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, createPin, runCapture, addAsset, startHidden, unpackedPath,
+      pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, getPrecise, ocrModelDir, resetPrecise: () => { preciseEngine = null; }, createPin, runCapture, addAsset, startHidden, unpackedPath,
     }), 2000);
   }
 });

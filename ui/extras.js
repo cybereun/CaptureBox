@@ -16,7 +16,8 @@
     if (!r.ok) { toast(`글자 인식 실패: ${r.message}`); return; }
     if (!r.text) { toast(r.message || '인식된 글자가 없습니다'); return; }
     $('ocrText').value = r.text;
-    $('ocrInfo').textContent = `${r.text.length.toLocaleString()}자 · 클립보드에 복사됨`;
+    const eng = r.engine === 'precise' ? '정밀 모드' : 'Windows 내장';
+    $('ocrInfo').textContent = `${r.text.length.toLocaleString()}자 · ${eng} · 클립보드에 복사됨${r.note ? ` · ${r.note}` : ''}`;
     $('ocrBox').hidden = false;
     toast('글자를 인식해 클립보드에 복사했습니다');
   });

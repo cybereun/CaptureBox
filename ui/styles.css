@@ -180,3 +180,15 @@ kbd { background: var(--surface2); border: 1px solid var(--line); border-radius:
 .ocr-body { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 16px; min-height: 0; }
 #ocrText { flex: 1; resize: none; width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); color: var(--text); font: 14px/1.6 'Malgun Gothic', 'Segoe UI', sans-serif; }
 .ocr-body .btns { margin: 0; align-items: center; }
+
+.sub { margin: 20px 0 6px; font-size: 14px; }
+.radio { display: block; margin: 8px 0; line-height: 1.55; cursor: pointer; }
+.radio input { margin-right: 6px; }
+
+/* 에셋 이름·크기는 푸터로, 미리보기 위쪽은 확대율과 아이콘 한 줄 */
+.bar { padding: 6px 16px; gap: 8px; }
+.actions { justify-content: flex-start; }
+#ftAsset { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#ftAsset[hidden] { display: none; }
+#footer #name { flex: none; width: 240px; max-width: 34vw; padding: 2px 6px; font-size: 12px; font-weight: 700; color: var(--text); }
+#footer #meta { font-size: 12px; white-space: nowrap; }

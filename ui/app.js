@@ -65,6 +65,7 @@ function renderViewer() {
   const a = current();
   $('empty').hidden = !!a;
   $('viewer').hidden = !a;
+  $('ftAsset').hidden = !a;   // 이름·크기 정보는 아래쪽 푸터에 표시
   if (!a) return;
   if ($('preview').getAttribute('src') !== a.url) { setZoom(0); cvFull(false); }
   $('preview').src = a.url;

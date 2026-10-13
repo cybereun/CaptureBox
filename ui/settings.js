@@ -145,6 +145,17 @@
   });
   loadLogin();
 
+  /* 글자 인식 방식 */
+  async function loadOcrMode() {
+    const s = await snap.getOcrMode();
+    for (const r of document.querySelectorAll('input[name=ocrMode]')) r.checked = r.value === s.mode;
+    $('ocrModeMsg').textContent = s.preciseAvailable ? '' : '정밀 모드 모델 파일을 찾지 못했습니다. 지금은 Windows 내장 방식으로 동작합니다.';
+  }
+  for (const r of document.querySelectorAll('input[name=ocrMode]')) {
+    r.addEventListener('change', async () => { await snap.setOcrMode(r.value); await loadOcrMode(); toast(r.value === 'precise' ? '정밀 모드로 바꿨습니다' : 'Windows 내장 방식으로 바꿨습니다'); });
+  }
+  loadOcrMode();
+
   snap.onUpdate((s) => { u = s; render(); });
   snap.getUpdate().then((s) => { u = s; render(); });
 })();
