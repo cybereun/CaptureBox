@@ -120,10 +120,12 @@ exports.run = async (ctx) => {
           await sleep(800);
           const rect = { x: 100, y: 100, w: 700, h: 500 };
           const crop = { x: Math.round(100 * sf), y: Math.round(100 * sf), width: Math.round(700 * sf), height: Math.round(500 * sf) };
-          const img = await ctx.scrollCapture({ display: d, rect, crop });
+          const log = [];
+          const img = await ctx.scrollCapture({ display: d, rect, crop }, log);
           const a = analyzeStitch(img, sf);
-          if (a.borders < 38) throw new Error(`행 경계 ${a.borders}개만 인식됨 (기대 ≥38) · ${JSON.stringify(a)}`);
-          if (a.badGaps > 0) throw new Error(`이어붙임이 어긋난 곳 ${a.badGaps}개 · 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})`);
+          const trace = ` · 진행기록: ${log.join(' | ')}`;
+          if (a.borders < 38) throw new Error(`행 경계 ${a.borders}개만 인식됨 (기대 ≥38) · ${JSON.stringify(a)}${trace}`);
+          if (a.badGaps > 0) throw new Error(`이어붙임이 어긋난 곳 ${a.badGaps}개 · 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})${trace}`);
           return `${a.width}x${a.height}px, 행 ${a.borders}개, 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})`;
         } finally { if (!tw.isDestroyed()) tw.destroy(); }
       });
@@ -234,6 +236,90 @@ exports.run = async (ctx) => {
     });
 
     // 핀
+    for (const [i, d] of displays.entries()) {
+      await step(`화면 고정(핀): 끌어서 이동해도 크기 유지 — 모니터 ${i + 1}/${displays.length} (@${d.scaleFactor}x)`, async () => {
+        const w = new BrowserWindow({ show: false });
+        await w.loadURL('data:text/html,<body></body>');
+        const url = await w.webContents.executeJavaScript("(function(){const c=document.createElement('canvas');c.width=800;c.height=500;const x=c.getContext('2d');x.fillStyle='#4c8dff';x.fillRect(0,0,800,500);return c.toDataURL('image/png')})()");
+        w.destroy();
+        const a = ctx.addAsset(nativeImage.createFromDataURL(url), 'edit');
+        const input = await ctx.startInput();
+        const c = screen.dipToScreenPoint({ x: d.bounds.x + d.bounds.width / 2, y: d.bounds.y + d.bounds.height / 2 });
+        const cx = Math.round(c.x), cy = Math.round(c.y);
+        await input.send(`move ${cx} ${cy}`);
+        await sleep(250);
+        const pw = ctx.createPin(a.id);
+        await sleep(900);
+        const sfD = d.scaleFactor, k0 = Math.min(1, 560 / (800 / sfD), 420 / (500 / sfD));
+        const want = { width: Math.max(100, Math.round(800 / sfD * k0)), height: Math.max(70, Math.round(500 / sfD * k0)) };   // createPin 이 의도한 크기
+        const b0 = pw.getBounds();
+        if (Math.abs(b0.width - want.width) > 2 || Math.abs(b0.height - want.height) > 2) throw new Error(`처음 크기가 의도와 다릅니다: 기대 ${want.width}x${want.height}, 실제 ${b0.width}x${b0.height}`);
+        const sender = { sender: pw.webContents };
+        ipcMain.emit('pin:begin', sender);
+        // 끌기를 여러 번(8회 × 15걸음) 반복해도 크기가 쌓여서 커지지 않아야 한다. 환산 반올림으로 ±2px 차이는 허용.
+        let grewAt = -1, step = 0;
+        for (let g = 0; g < 8; g++) {
+          ipcMain.emit('pin:begin', sender);
+          const bx = cx + g * 90, by = cy + g * 20;
+          for (let k = 1; k <= 15; k++) {
+            await input.send(`move ${bx + k * 7} ${by + k * 3}`);
+            await sleep(20);
+            ipcMain.emit('pin:drag', sender);
+            step++;
+            const b = pw.getBounds();
+            if (grewAt < 0 && (Math.abs(b.width - want.width) > 2 || Math.abs(b.height - want.height) > 2)) grewAt = step;
+          }
+        }
+        const b1 = pw.getBounds();
+        ipcMain.emit('pin:close', sender);
+        await sleep(300);
+        input.close();
+        if (grewAt >= 0 || Math.abs(b1.width - want.width) > 2 || Math.abs(b1.height - want.height) > 2) throw new Error(`크기가 변했습니다: 기대 ${want.width}x${want.height} → ${b1.width}x${b1.height} (${grewAt}번째 이동부터)`);
+        return `${b0.width}x${b0.height} → ${b1.width}x${b1.height} (8번 끌기·120걸음, 이동 거리 ${b1.x - b0.x}px)`;
+      });
+    }
+    if (displays.length > 1) {
+      await step(`화면 고정(핀): 모니터 사이를 끌어서 넘어가도 크기 유지 (${displays.length}대 가로지름)`, async () => {
+        const w = new BrowserWindow({ show: false });
+        await w.loadURL('data:text/html,<body></body>');
+        const url = await w.webContents.executeJavaScript("(function(){const c=document.createElement('canvas');c.width=800;c.height=500;const x=c.getContext('2d');x.fillStyle='#4c8dff';x.fillRect(0,0,800,500);return c.toDataURL('image/png')})()");
+        w.destroy();
+        const a = ctx.addAsset(nativeImage.createFromDataURL(url), 'edit');
+        const input = await ctx.startInput();
+        const center = (d) => { const c = screen.dipToScreenPoint({ x: d.bounds.x + d.bounds.width / 2, y: d.bounds.y + d.bounds.height / 2 }); return { x: Math.round(c.x), y: Math.round(c.y) }; };
+        const first = center(primary);
+        await input.send(`move ${first.x} ${first.y}`);
+        await sleep(250);
+        const pw = ctx.createPin(a.id);
+        await sleep(900);
+        const sf0 = primary.scaleFactor, k0 = Math.min(1, 560 / (800 / sf0), 420 / (500 / sf0));
+        const want = { width: Math.round(800 / sf0 * k0), height: Math.round(500 / sf0 * k0) };
+        const sender = { sender: pw.webContents };
+        let worst = 0, where = '';
+        // 기본 모니터 중앙 → 다른 모니터 중앙들을 차례로 지나가며 끈다
+        let cur = first;
+        const route = displays.filter((d) => d.id !== primary.id).map(center);
+        route.push(first);
+        for (const to of route) {
+          ipcMain.emit('pin:begin', sender);
+          for (let k = 1; k <= 30; k++) {
+            const x = Math.round(cur.x + (to.x - cur.x) * k / 30), y = Math.round(cur.y + (to.y - cur.y) * k / 30);
+            await input.send(`move ${x} ${y}`);
+            await sleep(25);
+            ipcMain.emit('pin:drag', sender);
+            const b = pw.getBounds();
+            const dev = Math.max(Math.abs(b.width - want.width), Math.abs(b.height - want.height));
+            if (dev > worst) { worst = dev; where = `${b.width}x${b.height} @(${b.x},${b.y})`; }
+          }
+          cur = to;
+        }
+        ipcMain.emit('pin:close', sender);
+        await sleep(300);
+        input.close();
+        if (worst > 6) throw new Error(`모니터를 넘는 동안 크기가 어긋났습니다: 기대 ${want.width}x${want.height}, 최대 편차 ${worst}px (${where})`);
+        return `기대 ${want.width}x${want.height}, 가로지르는 동안 최대 편차 ${worst}px`;
+      });
+    }
     await step('화면 고정(핀): 생성·크기 조절·닫기', async () => {
       const w = new BrowserWindow({ show: false });
       await w.loadURL('data:text/html,<body></body>');

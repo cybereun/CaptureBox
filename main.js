@@ -252,8 +252,8 @@ function startInput() {
   });
 }
 
-async function scrollCapture(sel) {
-  const { display: d, rect, crop } = sel;
+async function scrollCapture(sel, log) {
+  const { display: d, rect, crop } = sel;   // log: 진단용 배열(선택). 단계마다 상태를 기록한다
   const sf = d.scaleFactor;
   const regionDip = { x: d.bounds.x + rect.x, y: d.bounds.y + rect.y, width: rect.w, height: rect.h };
   const center = screen.dipToScreenPoint({ x: regionDip.x + rect.w / 2, y: regionDip.y + rect.h / 2 });
@@ -282,11 +282,13 @@ async function scrollCapture(sel) {
       await input.send(`wheel ${-notches}`);
       await sleep(450);
       let r = st.add(await grabCrop());
+      if (log) log.push(`g${guard} wheel${-notches} → ${r.status}${r.shift ? ' shift=' + r.shift : ''}${r.score !== undefined ? ' score=' + r.score.toFixed(2) : ''}`);
 
       if (r.status === 'end') { // 스크롤 애니메이션·렌더링 지연일 수 있어 여러 번 더 기다리며 확인 (진짜 끝일 때만 약 2초 더 걸림)
         for (let k = 0; k < 3 && r.status === 'end'; k++) {
           await sleep(700);
           r = st.add(await grabCrop());
+          if (log) log.push(`   재확인${k + 1} → ${r.status}${r.shift ? ' shift=' + r.shift : ''}`);
         }
         // 아직 한 번도 스크롤되지 않았다면 첫 휠이 창에 전달되지 않았을 수 있다 — 커서를 살짝 흔들어 다시 시도한다
         if (r.status === 'end' && step === 0 && nudges < 2) {
@@ -628,6 +630,7 @@ ipcMain.handle('text:copy', (_e, text) => { clipboard.writeText(String(text || '
 /* ---------- 화면에 고정 (핀) ---------- */
 const pins = new Set();
 const pinAnchor = new Map();
+const pinSizes = new Map();   // 핀마다 "의도한" 크기. getBounds() 는 배율 환산 반올림으로 ±1px 달라질 수 있어 기준으로 쓰지 않는다
 function createPin(id) {
   const a = findAsset(id);
   if (!a) return null;
@@ -638,16 +641,20 @@ function createPin(id) {
   w = Math.max(100, Math.round(w * k));
   h = Math.max(70, Math.round(h * k));
   const off = (pins.size % 6) * 28;
+  const px = d.workArea.x + d.workArea.width - w - 24 - off, py = d.workArea.y + 24 + off;
   const pw = new BrowserWindow({
-    x: d.workArea.x + d.workArea.width - w - 24 - off, y: d.workArea.y + 24 + off,
+    x: px, y: py,
     width: w, height: h, useContentSize: true, frame: false, resizable: true, minimizable: false, maximizable: false,
     alwaysOnTop: true, skipTaskbar: true, hasShadow: true, backgroundColor: '#1f2430',
     webPreferences: { preload: path.join(__dirname, 'ui', 'pin-preload.js'), sandbox: true },
   });
   pw.setAlwaysOnTop(true, 'screen-saver');
   pw.setAspectRatio(w / h);
+  setPinBounds(pw, px, py, w, h);   // 만들 때 배율 환산으로 몇 px 어긋나는 것을 바로잡는다
   pins.add(pw);
-  pw.on('closed', () => { pins.delete(pw); pinAnchor.delete(pw.id); });
+  pinSizes.set(pw.id, { w, h });
+  const wid = pw.id;
+  pw.on('closed', () => { pins.delete(pw); pinAnchor.delete(wid); pinSizes.delete(wid); });
   pw.loadFile(path.join(__dirname, 'ui', 'pin.html'));
   pw.webContents.once('did-finish-load', () => {
     pw.webContents.send('pin:init', 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64'));
@@ -656,22 +663,35 @@ function createPin(id) {
 }
 const pinOf = (e) => BrowserWindow.fromWebContents(e.sender);
 ipcMain.handle('asset:pin', (_e, id) => !!createPin(id));
-ipcMain.on('pin:begin', (e) => { const w = pinOf(e); if (w) pinAnchor.set(w.id, { pos: w.getPosition(), cur: screen.getCursorScreenPoint() }); });
+// 창 이동·확대는 위치만 바꾸지 않고 크기도 함께 명시한다. 배율이 다른 모니터를 지나거나 소수 배율(1.5배)에서 setPosition 만 쓰면
+// 창 크기가 다시 계산되어 끌 때마다 커지는 문제가 있었다.
+function setPinBounds(w, x, y, width, height) {
+  w.setBounds({ x: Math.round(x), y: Math.round(y), width, height });
+  const nb = w.getBounds();
+  if (nb.width !== width || nb.height !== height) w.setBounds({ x: Math.round(x), y: Math.round(y), width, height });   // 모니터 경계에서 한 번 더
+}
+ipcMain.on('pin:begin', (e) => {
+  const w = pinOf(e);
+  if (w) {
+    const b = w.getBounds(), sz = pinSizes.get(w.id) || { w: b.width, h: b.height };
+    pinAnchor.set(w.id, { x: b.x, y: b.y, width: sz.w, height: sz.h, cur: screen.getCursorScreenPoint() });
+  }
+});
 ipcMain.on('pin:drag', (e) => {
   const w = pinOf(e); const an = w && pinAnchor.get(w.id);
   if (!an) return;
   const c = screen.getCursorScreenPoint();
-  w.setPosition(an.pos[0] + c.x - an.cur.x, an.pos[1] + c.y - an.cur.y);
+  setPinBounds(w, an.x + c.x - an.cur.x, an.y + c.y - an.cur.y, an.width, an.height);
 });
 ipcMain.on('pin:zoom', (e, dir) => {
   const w = pinOf(e); if (!w) return;
-  const [cw, ch] = w.getContentSize();
-  const [x, y] = w.getPosition();
+  const b = w.getBounds(), sz = pinSizes.get(w.id) || { w: b.width, h: b.height };
   const f = dir > 0 ? 1.1 : 1 / 1.1;
-  const nw = Math.max(100, Math.min(4000, Math.round(cw * f)));
-  const nh = Math.max(70, Math.round(nw * ch / cw));
-  w.setPosition(Math.round(x - (nw - cw) / 2), Math.round(y - (nh - ch) / 2));
-  w.setContentSize(nw, nh);
+  const nw = Math.max(100, Math.min(4000, Math.round(sz.w * f)));
+  const nh = Math.max(70, Math.round(nw * sz.h / sz.w));
+  setPinBounds(w, b.x - (nw - sz.w) / 2, b.y - (nh - sz.h) / 2, nw, nh);
+  pinSizes.set(w.id, { w: nw, h: nh });
+  pinAnchor.delete(w.id);   // 크기가 바뀌었으니 다음 끌기에서 기준을 다시 잡는다
 });
 ipcMain.on('pin:opacity', (e, dir) => {
   const w = pinOf(e); if (!w) return;
