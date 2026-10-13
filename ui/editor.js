@@ -7,10 +7,18 @@
   let shapes = [];
   let undo = [], redo = [];
   let tool = 'rect', draft = null, cropRect = null, baseId = null, textInput = null;
+  let sel = -1, drag = null;   // 선택된 주석 / 이동 중 정보
 
   const snap0 = () => ({ base, shapes: JSON.parse(JSON.stringify(shapes)) });
   function pushUndo() { undo.push(snap0()); redo = []; sync(); }
-  function restore(st) { base = st.base; shapes = st.shapes; cv.width = base.width; cv.height = base.height; draw(); sync(); }
+  function restore(st) { sel = -1; base = st.base; shapes = st.shapes; cv.width = base.width; cv.height = base.height; fit(); draw(); sync(); }
+  // 캔버스 표시 크기: 원본 크기, 단 스테이지 너비를 넘으면 맞춤(비율 유지)
+  function fit() {
+    const avail = Math.max(100, $('edStage').clientWidth - 32);
+    cv.style.width = `${Math.min(cv.width, avail)}px`;
+    cv.style.height = 'auto';
+  }
+  window.addEventListener('resize', () => { if (!$('editor').hidden) fit(); });
   function sync() { $('edUndo').disabled = !undo.length; $('edRedo').disabled = !redo.length; }
 
   function drawShape(c, s) {
@@ -32,15 +40,57 @@
       }
     } else if (s.t === 'text') {
       c.font = `700 ${s.size}px "Malgun Gothic", sans-serif`; c.textBaseline = 'top';
-      s.text.split('\n').forEach((ln, i) => c.fillText(ln, s.x1, s.y1 + i * s.size * 1.2));
+      const lines = s.text.split('\n'), lh = s.size * 1.2;
+      if (s.bg) {
+        const w = Math.max(...lines.map((l) => c.measureText(l).width)), pad = s.size * 0.25;
+        c.fillStyle = s.bg; c.fillRect(s.x1 - pad, s.y1 - pad, w + pad * 2, lines.length * lh + pad * 2 - (lh - s.size));
+        c.fillStyle = s.color;
+      }
+      lines.forEach((ln, i) => c.fillText(ln, s.x1, s.y1 + i * lh));
     }
   }
+
+  /* 선택/이동용 경계와 적중 검사 */
+  function bounds(s) {
+    if (s.t === 'text') {
+      ctx.font = `700 ${s.size}px "Malgun Gothic", sans-serif`;
+      const lines = s.text.split('\n');
+      const pad = s.bg ? s.size * 0.25 : 0;
+      return { x: s.x1 - pad, y: s.y1 - pad, w: Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2, h: lines.length * s.size * 1.2 + pad * 2 };
+    }
+    return { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2), w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) };
+  }
+  const segDist = (px, py, x1, y1, x2, y2) => {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2)) : 0;
+    return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+  };
+  function hits(s, p) {
+    const tol = Math.max(10 * cv.width / Math.max(1, cv.clientWidth), (s.w || 0) / 2 + 4);
+    const b = bounds(s);
+    if (s.t === 'text') return p.x >= b.x - 4 && p.x <= b.x + b.w + 4 && p.y >= b.y - 4 && p.y <= b.y + b.h + 4;
+    if (s.t === 'line' || s.t === 'arrow') return segDist(p.x, p.y, s.x1, s.y1, s.x2, s.y2) <= tol;
+    if (s.t === 'rect') {
+      const inOuter = p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
+      const inInner = p.x > b.x + tol && p.x < b.x + b.w - tol && p.y > b.y + tol && p.y < b.y + b.h - tol;
+      return inOuter && !inInner;
+    }
+    const a = b.w / 2 + 0.001, h = b.h / 2 + 0.001, nx = (p.x - (b.x + a)) / a, ny = (p.y - (b.y + h)) / h;
+    return Math.abs(Math.hypot(nx, ny) - 1) * Math.min(a, h) <= tol;
+  }
+  const hitTop = (p) => { for (let i = shapes.length - 1; i >= 0; i--) if (hits(shapes[i], p)) return i; return -1; };
+  function moveShape(s, dx, dy) { s.x1 += dx; s.y1 += dy; if (s.x2 !== undefined) { s.x2 += dx; s.y2 += dy; } }
 
   function draw() {
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(base, 0, 0);
     for (const s of shapes) drawShape(ctx, s);
     if (draft) drawShape(ctx, draft);
+    if (sel >= 0 && shapes[sel]) {
+      const b = bounds(shapes[sel]), k = cv.width / Math.max(1, cv.clientWidth), g = 6 * k;
+      ctx.save(); ctx.strokeStyle = '#2f6df0'; ctx.lineWidth = 2 * k;
+      ctx.setLineDash([8 * k, 6 * k]); ctx.strokeRect(b.x - g, b.y - g, b.w + g * 2, b.h + g * 2); ctx.restore();
+    }
     if (cropRect) {
       const r = cropRect;
       ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.5)';
@@ -70,17 +120,29 @@
     const p = clampPt(pos(e));
     if (tool === 'text') { startText(p); return; }
     cv.setPointerCapture(e.pointerId);
+    if (tool === 'select') {
+      sel = hitTop(p);
+      if (sel >= 0) { drag = { sx: p.x, sy: p.y, orig: JSON.parse(JSON.stringify(shapes[sel])), moved: false }; syncControls(); }
+      draw();
+      return;
+    }
     if (tool === 'crop') { cropRect = { x: p.x, y: p.y, w: 0, h: 0, ox: p.x, oy: p.y }; return; }
     draft = { t: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, color: $('edColor').value, w: Number($('edWidth').value) };
   });
   cv.addEventListener('pointermove', (e) => {
     const p = clampPt(pos(e));
-    if (cropRect && e.buttons) {
+    if (drag) {
+      if (!drag.moved) { pushUndo(); drag.moved = true; }
+      shapes[sel] = JSON.parse(JSON.stringify(drag.orig));
+      moveShape(shapes[sel], p.x - drag.sx, p.y - drag.sy);
+      draw();
+    } else if (cropRect && e.buttons) {
       cropRect.x = Math.min(cropRect.ox, p.x); cropRect.y = Math.min(cropRect.oy, p.y);
       cropRect.w = Math.abs(p.x - cropRect.ox); cropRect.h = Math.abs(p.y - cropRect.oy); draw();
     } else if (draft) { draft.x2 = p.x; draft.y2 = p.y; constrain(draft, e.shiftKey); draw(); }
   });
   cv.addEventListener('pointerup', () => {
+    if (drag) { drag = null; draw(); return; }
     if (draft) {
       const d = draft; draft = null;
       if (Math.hypot(d.x2 - d.x1, d.y2 - d.y1) > 3) { pushUndo(); shapes.push(d); }
@@ -102,7 +164,7 @@
     for (const s of shapes) drawShape(c, s);   // 주석을 바탕에 합쳐서 확정
     base = out; shapes = [];
     cv.width = out.width; cv.height = out.height;
-    draw();
+    fit(); draw();
   }
 
   function startText(p) {
@@ -110,7 +172,8 @@
     const inp = document.createElement('input');
     inp.className = 'tin'; inp.style.color = $('edColor').value;
     inp.style.left = `${p.x * k}px`; inp.style.top = `${p.y * k}px`; inp.style.fontSize = `${size * k}px`;
-    inp._pt = { x: p.x, y: p.y, size, color: $('edColor').value };
+    inp._pt = { x: p.x, y: p.y, size, color: $('edColor').value, bg: $('edBgOn').checked ? $('edBg').value : null };
+    if (inp._pt.bg) inp.style.background = inp._pt.bg;
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') commitText(); else if (e.key === 'Escape') { inp.value = ''; commitText(); } });
     inp.addEventListener('blur', () => commitText());
     $('edWrap').append(inp); textInput = inp;
@@ -123,23 +186,43 @@
     inp.remove();
     if (!text) return;
     pushUndo();
-    shapes.push({ t: 'text', x1: pt.x, y1: pt.y, text, size: pt.size, color: pt.color });
+    shapes.push({ t: 'text', x1: pt.x, y1: pt.y, text, size: pt.size, color: pt.color, bg: pt.bg });
+    sel = -1;
     draw();
   }
 
   function setTool(t) {
-    commitText(); cropRect = null; tool = t; draw();
+    commitText(); cropRect = null; drag = null; if (t !== 'select') sel = -1; tool = t; draw();
     for (const b of $('edTools').children) b.classList.toggle('on', b.dataset.tool === t);
-    cv.style.cursor = t === 'text' ? 'text' : 'crosshair';
+    cv.style.cursor = t === 'text' ? 'text' : t === 'select' ? 'default' : 'crosshair';
   }
   $('edTools').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setTool(b.dataset.tool); });
+
+  /* 선택한 주석의 속성을 상단 컨트롤에 반영 / 컨트롤 변경을 선택한 주석에 적용 */
+  function syncControls() {
+    const s = shapes[sel]; if (!s) return;
+    $('edColor').value = s.color;
+    if (s.t === 'text') { $('edSize').value = String(s.size); $('edBgOn').checked = !!s.bg; if (s.bg) $('edBg').value = s.bg; }
+    else $('edWidth').value = String(s.w);
+  }
+  function applyToSel(fn) {
+    if (sel < 0 || !shapes[sel]) return;
+    pushUndo(); fn(shapes[sel]); draw();
+  }
+  $('edColor').addEventListener('change', () => applyToSel((s) => { s.color = $('edColor').value; }));
+  $('edWidth').addEventListener('change', () => applyToSel((s) => { if (s.t !== 'text') s.w = Number($('edWidth').value); }));
+  $('edSize').addEventListener('change', () => applyToSel((s) => { if (s.t === 'text') s.size = Number($('edSize').value); }));
+  const bgChange = () => applyToSel((s) => { if (s.t === 'text') s.bg = $('edBgOn').checked ? $('edBg').value : null; });
+  $('edBgOn').addEventListener('change', bgChange);
+  $('edBg').addEventListener('change', bgChange);
+  const delSel = () => { if (sel < 0) return; pushUndo(); shapes.splice(sel, 1); sel = -1; draw(); };
 
   const doUndo = () => { commitText(); if (!undo.length) return; redo.push(snap0()); restore(undo.pop()); };
   const doRedo = () => { if (!redo.length) return; undo.push(snap0()); restore(redo.pop()); };
   $('edUndo').addEventListener('click', doUndo);
   $('edRedo').addEventListener('click', doRedo);
 
-  function close() { commitText(); $('editor').hidden = true; base = null; shapes = []; undo = []; redo = []; draft = cropRect = null; }
+  function close() { sel = -1; drag = null; commitText(); $('editor').hidden = true; base = null; shapes = []; undo = []; redo = []; draft = cropRect = null; }
   $('edCancel').addEventListener('click', close);
   $('edSave').addEventListener('click', async () => {
     commitText();
@@ -158,10 +241,11 @@
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); }
     else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); doRedo(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && sel >= 0) { e.preventDefault(); delSel(); }
     else if (e.key === 'Escape') { if (cropRect) { cropRect = null; draw(); } else close(); }
     else if (e.key === 'Enter' && cropRect && cropRect.w > 3) applyCrop();
     else if (!e.ctrlKey && !e.altKey && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
-      const m = { r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text', c: 'crop' }[k];
+      const m = { v: 'select', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text', c: 'crop' }[k];
       if (m) { e.preventDefault(); setTool(m); }
     }
   });
@@ -174,9 +258,10 @@
     base = document.createElement('canvas');
     base.width = img.naturalWidth; base.height = img.naturalHeight;
     base.getContext('2d').drawImage(img, 0, 0);
-    baseId = id; shapes = []; undo = []; redo = []; draft = cropRect = null;
+    baseId = id; shapes = []; undo = []; redo = []; draft = cropRect = null; sel = -1; drag = null;
     cv.width = base.width; cv.height = base.height;
     $('editor').hidden = false;
+    fit();
     setTool('rect'); sync();
   };
   $('edit').addEventListener('click', () => selectedId && window.openEditor(selectedId));

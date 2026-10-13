@@ -31,6 +31,7 @@
     <div id="empty" class="empty">
       <div class="big">캡처를 시작해 보세요</div>
       <p>위의 버튼이나 단축키로 캡처하면 오른쪽 에셋 목록에 쌓입니다.</p>
+      <p class="tip">캡처하면 미리보기 위쪽의 <b>✎ 편집</b> 버튼으로 사각틀·원·화살표·문자·자르기를 넣을 수 있어요.</p>
       <p class="keys"><kbd>Ctrl+Alt+1</kbd> 영역 &nbsp; <kbd>Ctrl+Alt+2</kbd> 전체 화면 &nbsp; <kbd>Ctrl+Alt+3</kbd> 스크롤</p>
     </div>
     <div id="viewer" hidden>
@@ -40,7 +41,7 @@
         <div class="actions">
           <button id="fit">100%</button>
           <span id="zoomLabel" title="Ctrl+휠로 확대/축소"></span>
-          <button id="edit">편집</button>
+          <button id="edit" class="primary" title="주석·도형·문자·자르기">✎ 편집</button>
           <button id="copy">복사</button>
           <button id="save">저장…</button>
           <button id="reveal">폴더</button>
@@ -72,39 +73,49 @@
 </div>
 
 <div id="settings" class="modal" hidden>
-  <div class="card">
+  <div class="card sbox-card">
     <div class="phead"><b>설정</b><button id="setClose">닫기</button></div>
-    <div class="sbody">
-      <h3>저장 폴더</h3>
-      <div class="srow">
-        <code id="storeDir" class="path"></code>
+    <div class="sbox">
+      <nav class="snav" id="setNav">
+        <button data-pane="pStore" class="on">📁 저장 폴더</button>
+        <button data-pane="pUpdate">⟳ 업데이트</button>
+        <button data-pane="pHelp">❓ 사용 도움말</button>
+      </nav>
+      <div class="spanes">
+        <section id="pStore" class="spane">
+          <h3>저장 폴더</h3>
+          <p class="hint">캡처한 이미지가 저장되는 위치입니다. 한 번 지정하면 다시 바꾸기 전까지 유지됩니다.</p>
+          <div id="storeDir" class="pathbox"></div>
+          <div class="btns">
+            <button id="storeChoose" class="primary">폴더 변경…</button>
+            <button id="storeOpen">폴더 열기</button>
+            <button id="storeReset">기본 위치로</button>
+          </div>
+          <p id="storeMsg" class="hint"></p>
+          <p class="hint">폴더를 바꾸면 기존 캡처도 새 폴더로 옮겨집니다.</p>
+        </section>
+        <section id="pUpdate" class="spane" hidden>
+          <h3>업데이트</h3>
+          <div class="verbox"><span class="muted">현재 버전</span><b id="setVer"></b></div>
+          <p id="setUpd" class="hint"></p>
+          <div class="btns">
+            <button id="setCheck">업데이트 확인</button>
+            <button id="setInstall" class="primary" hidden>재시작하여 설치</button>
+          </div>
+        </section>
+        <section id="pHelp" class="spane" hidden>
+          <h3>사용 도움말</h3>
+          <p class="hint">항목을 누르면 설명이 펼쳐집니다.</p>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>영역 캡처 <kbd>Ctrl+Alt+1</kbd></span><i>▾</i></button><div class="acc-b" hidden>화면이 멈추면 드래그로 캡처할 영역을 고릅니다. Esc로 취소합니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>창 캡처</span><i>▾</i></button><div class="acc-b" hidden>열려 있는 창 목록(썸네일)에서 캡처할 창을 고릅니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>전체 화면 <kbd>Ctrl+Alt+2</kbd></span><i>▾</i></button><div class="acc-b" hidden>마우스가 있는 모니터 전체를 캡처합니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>스크롤 캡처 <kbd>Ctrl+Alt+3</kbd></span><i>▾</i></button><div class="acc-b" hidden>스크롤되는 부분만 드래그하면 자동으로 내려가며 한 장으로 이어 붙입니다. 고정 헤더·사이드바는 빼고 선택하면 결과가 깔끔합니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>지연 · 자동 복사</span><i>▾</i></button><div class="acc-b" hidden>지연을 3/5/10초로 두면 그 시간 뒤에 캡처합니다. ‘캡처 후 자동 복사’를 켜면 캡처 직후 클립보드에 복사됩니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>에셋 목록</span><i>▾</i></button><div class="acc-b" hidden>클릭=미리보기, 더블클릭=복사, 끌어서 카톡·문서·폴더에 바로 놓기, Delete=삭제, Ctrl+C=복사. 이름은 미리보기 위쪽에서 바꿀 수 있습니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>확대 · 축소</span><i>▾</i></button><div class="acc-b" hidden>미리보기 위에서 Ctrl+마우스 휠로 확대·축소합니다. 이미지를 클릭하거나 맞춤/100% 버튼을 누르면 되돌아갑니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>편집</span><i>▾</i></button><div class="acc-b" hidden>에셋을 선택하고 <b>편집</b> 버튼을 누릅니다. 선택(V) · 사각틀(R) · 원형틀(O) · 선/밑줄(L) · 화살표(A) · 문자(T) · 자르기(C, Enter로 적용). <b>선택</b> 도구로 그린 주석을 눌러 옮기고, Delete로 지우고, 위쪽 색·굵기·글자 크기를 바꿀 수 있습니다. 문자는 ‘글자 배경’을 켜면 색 박스가 깔립니다. Shift=정비율/각도 고정, Ctrl+Z/Y=취소/다시. 저장하면 새 에셋으로 추가되고 원본은 그대로 남습니다.</div></div>
+        </section>
       </div>
-      <div class="srow">
-        <button id="storeChoose">폴더 변경…</button>
-        <button id="storeOpen">폴더 열기</button>
-        <button id="storeReset">기본 위치로</button>
-        <span id="storeMsg" class="muted"></span>
-      </div>
-      <p class="hint">한 번 지정한 폴더는 다시 바꾸기 전까지 유지됩니다. 변경하면 기존 캡처도 새 폴더로 옮겨집니다.</p>
-      <h3>업데이트</h3>
-      <div class="srow">
-        <span>현재 버전 <b id="setVer"></b></span>
-        <span id="setUpd" class="muted"></span>
-        <button id="setCheck">업데이트 확인</button>
-        <button id="setInstall" class="primary" hidden>재시작하여 설치</button>
-      </div>
-      <h3>사용 도움말</h3>
-      <ul class="help">
-        <li><b>영역</b> (Ctrl+Alt+1): 화면이 멈추면 드래그로 영역을 고릅니다. Esc로 취소합니다.</li>
-        <li><b>창</b>: 열린 창 목록에서 캡처할 창을 고릅니다.</li>
-        <li><b>전체 화면</b> (Ctrl+Alt+2): 마우스가 있는 모니터 전체를 캡처합니다.</li>
-        <li><b>스크롤</b> (Ctrl+Alt+3): 스크롤되는 부분만 드래그하면 자동으로 내려가며 한 장으로 이어 붙입니다.</li>
-        <li><b>지연</b>: 3/5/10초 뒤에 캡처합니다. <b>자동 복사</b>를 켜면 캡처 직후 클립보드에 복사됩니다.</li>
-        <li><b>에셋 목록</b>: 클릭=미리보기, 더블클릭=복사, 끌어서 다른 앱에 놓기, Delete=삭제.</li>
-        <li><b>확대·축소</b>: 미리보기 위에서 Ctrl+마우스 휠. 이미지 클릭 또는 맞춤/100% 버튼으로 되돌립니다.</li>
-        <li><b>편집</b>: 사각틀(R) · 원형틀(O) · 선/밑줄(L) · 화살표(A) · 문자(T) · 자르기(C, Enter로 적용). Shift=정비율/각도 고정, Ctrl+Z/Y=취소/다시. 저장하면 새 에셋으로 추가됩니다.</li>
-        <li>에셋 저장 위치: 설정의 <b>저장 폴더</b>에서 확인·변경</li>
-      </ul>
     </div>
   </div>
 </div>
@@ -118,6 +129,7 @@
 <div id="editor" class="modal ed" hidden>
   <div class="edbar">
     <div class="tools" id="edTools">
+      <button data-tool="select" title="선택·이동 (V)">☝ 선택</button>
       <button data-tool="rect" title="사각틀 (R)">▭ 사각틀</button>
       <button data-tool="ellipse" title="원형틀 (O)">◯ 원형틀</button>
       <button data-tool="line" title="선/밑줄 (L)">／ 선·밑줄</button>
@@ -128,6 +140,7 @@
     <label class="opt">색 <input type="color" id="edColor" value="#ff3b30"></label>
     <label class="opt">굵기 <select id="edWidth"><option value="2">얇게</option><option value="4" selected>보통</option><option value="8">굵게</option><option value="14">아주 굵게</option></select></label>
     <label class="opt">글자 <select id="edSize"><option value="20">20</option><option value="28" selected>28</option><option value="40">40</option><option value="60">60</option><option value="90">90</option></select></label>
+    <label class="opt"><input type="checkbox" id="edBgOn"> 글자 배경 <input type="color" id="edBg" value="#ffe14d"></label>
     <button id="edUndo" title="실행 취소 (Ctrl+Z)">↶</button>
     <button id="edRedo" title="다시 실행 (Ctrl+Y)">↷</button>
     <span class="grow"></span>

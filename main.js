@@ -52,11 +52,21 @@ function moveStore(newDir) {
   let existing = [];
   try { existing = JSON.parse(fs.readFileSync(path.join(newDir, 'index.json'), 'utf8')); } catch { /* 없음 */ }
   const files = (id) => [`${id}.png`, `${id}.thumb.png`];
-  for (const a of oldAssets) for (const f of files(a.id)) fs.copyFileSync(path.join(oldDir, f), path.join(newDir, f));
-  const have = new Set(oldAssets.map((a) => a.id));
+  // 원본 이미지가 없는 항목은 건너뛰고, 썸네일이 없으면 이미지에서 다시 만든다.
+  const movable = oldAssets.filter((a) => fs.existsSync(path.join(oldDir, `${a.id}.png`)));
+  for (const a of movable) {
+    fs.copyFileSync(path.join(oldDir, `${a.id}.png`), path.join(newDir, `${a.id}.png`));
+    const t = path.join(oldDir, `${a.id}.thumb.png`);
+    if (fs.existsSync(t)) fs.copyFileSync(t, path.join(newDir, `${a.id}.thumb.png`));
+    else {
+      const img = nativeImage.createFromPath(path.join(oldDir, `${a.id}.png`));
+      fs.writeFileSync(path.join(newDir, `${a.id}.thumb.png`), (img.getSize().width > 360 ? img.resize({ width: 360, quality: 'good' }) : img).toPNG());
+    }
+  }
+  const have = new Set(movable.map((a) => a.id));
   assetsDir = newDir;
   indexFile = path.join(newDir, 'index.json');
-  assets = [...oldAssets, ...existing.filter((a) => !have.has(a.id))]
+  assets = [...movable, ...existing.filter((a) => !have.has(a.id))]
     .filter((a) => fs.existsSync(imgPath(a.id))).sort((x, y) => y.createdAt - x.createdAt);
   saveIndex();
   for (const a of oldAssets) for (const f of files(a.id)) { try { fs.unlinkSync(path.join(oldDir, f)); } catch { /* 무시 */ } }

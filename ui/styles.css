@@ -90,7 +90,7 @@ kbd { background: var(--surface2); border: 1px solid var(--line); border-radius:
 #edStage { flex: 1; overflow: auto; padding: 16px; display: flex; background:
   repeating-conic-gradient(var(--checker) 0 25%, transparent 0 50%) 0 0 / 20px 20px; }
 #edWrap { position: relative; margin: auto; line-height: 0; }
-#edCanvas { display: block; max-width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,.25); cursor: crosshair; touch-action: none; }
+#edCanvas { display: block; box-shadow: 0 4px 24px rgba(0,0,0,.25); cursor: crosshair; touch-action: none; }
 #edWrap input.tin { position: absolute; margin: 0; padding: 0; border: 1px dashed currentColor; background: rgba(255,255,255,.35); outline: none; font-family: "Malgun Gothic", sans-serif; font-weight: 700; line-height: 1.2; min-width: 60px; }
 
 /* ---------- 푸터 / 설정 / 업데이트 ---------- */
@@ -101,18 +101,37 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 #footer .upd { padding: 2px 10px; font-size: 12px; border-radius: 999px; }
 #footer .upd.ready { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 .modal[hidden] { display: none; }
-#settings .card { width: min(640px, 100%); }
-.sbody { padding: 6px 18px 18px; overflow-y: auto; }
-.sbody h3 { margin: 16px 0 8px; font-size: 14px; }
-.srow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.help { margin: 0; padding-left: 18px; line-height: 1.7; }
-.help code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; }
 #updCard { position: fixed; right: 16px; bottom: 44px; width: 300px; background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.35); z-index: 5; }
 #updCard[hidden] { display: none; }
 #updCard p { margin: 6px 0 10px; color: var(--muted); font-size: 13px; max-height: 90px; overflow: auto; white-space: pre-wrap; }
 
-.path { background: var(--surface2); padding: 4px 8px; border-radius: 6px; word-break: break-all; flex: 1; }
-.hint { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
-#storeMsg { font-size: 12px; }
-#storeMsg.err { color: var(--danger); }
 #ftStatus { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ---------- 설정 창 ---------- */
+.modal .sbox-card { width: min(760px, 100%); height: min(560px, 100%); }
+.sbox { flex: 1; display: flex; min-height: 0; }
+.snav { width: 170px; flex: none; padding: 12px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; background: var(--surface); }
+.snav button { text-align: left; border: 0; background: transparent; padding: 9px 12px; border-radius: 8px; font-weight: 600; color: var(--muted); }
+.snav button:hover { background: var(--surface2); color: var(--text); }
+.snav button.on { background: var(--accent); color: var(--accent-text); }
+.spanes { flex: 1; min-width: 0; overflow-y: auto; }
+.spane { padding: 20px 24px 28px; }
+.spane[hidden] { display: none; }
+.spane h3 { margin: 0 0 6px; font-size: 17px; }
+.hint { margin: 4px 0 12px; color: var(--muted); font-size: 13px; }
+.hint:empty { display: none; }
+#storeMsg { color: var(--danger); }
+.pathbox { display: block; width: 100%; margin: 6px 0 14px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; font-family: Consolas, 'Malgun Gothic', monospace; font-size: 13px; line-height: 1.5; word-break: break-all; user-select: text; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.verbox { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 4px; font-size: 18px; }
+.acc { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: var(--surface); }
+.acc-h { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 0; border-radius: 0; background: var(--surface); padding: 11px 14px; font-weight: 600; text-align: left; }
+.acc-h:hover { background: var(--surface2); }
+.acc-h i { font-style: normal; color: var(--muted); transition: transform .15s; }
+.acc-h[aria-expanded="true"] i { transform: rotate(180deg); }
+.acc-b { padding: 4px 14px 14px; color: var(--muted); line-height: 1.65; }
+.acc-b[hidden] { display: none; }
+kbd { background: var(--surface2); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; font-size: 12px; font-weight: 400; }
+@media (max-width: 640px) { .sbox { flex-direction: column; } .snav { width: auto; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; } }
+.empty .tip { color: var(--accent); margin: 6px 0 14px; }
+#edBg { width: 28px; height: 22px; padding: 0; border: 1px solid var(--line); background: none; vertical-align: middle; }

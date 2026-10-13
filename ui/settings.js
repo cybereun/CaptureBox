@@ -71,6 +71,23 @@
   $('storeOpen').addEventListener('click', () => snap.openStore());
   $('openSettings').addEventListener('click', () => loadStore());
 
+  /* 탭 / 도움말 아코디언 */
+  $('setNav').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    for (const n of $('setNav').children) n.classList.toggle('on', n === b);
+    for (const s of document.querySelectorAll('.spane')) s.hidden = s.id !== b.dataset.pane;
+  });
+  for (const h of document.querySelectorAll('.acc-h')) {
+    h.addEventListener('click', () => {
+      const open = h.getAttribute('aria-expanded') !== 'true';
+      for (const o of document.querySelectorAll('.acc-h')) {
+        o.setAttribute('aria-expanded', String(o === h && open));
+        o.nextElementSibling.hidden = !(o === h && open);
+      }
+    });
+  }
+
   snap.onUpdate((s) => { u = s; render(); });
   snap.getUpdate().then((s) => { u = s; render(); });
 })();
