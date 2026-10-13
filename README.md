@@ -29,7 +29,7 @@
 
 ## 설치
 
-1. [**Releases**](https://github.com/cybereun/CaptureBox/releases/latest) 에서 `CaptureBox Setup x.x.x.exe` 를 내려받습니다.
+1. [**Releases**](https://github.com/cybereun/CaptureBox/releases/latest) 에서 `CaptureBox-Setup-x.x.x.exe` 를 내려받습니다.
 2. 실행하면 바로 설치되고 앱이 시작됩니다. (관리자 권한 불필요)
 3. 코드 서명이 없어서 처음에 Windows SmartScreen 경고가 뜰 수 있습니다. **추가 정보 → 실행** 을 누르세요.
 
@@ -85,7 +85,7 @@ npm run dist     # 설치 파일 빌드 (dist/)
 
 1. `package.json` 의 `version` 을 올립니다.
 2. `npm run dist` 로 빌드합니다.
-3. GitHub Release(태그 `vX.Y.Z`)에 `CaptureBox Setup X.Y.Z.exe`, `.blockmap`, `latest.yml` 을 올립니다.
+3. GitHub Release(태그 `vX.Y.Z`)에 `CaptureBox-Setup-X.Y.Z.exe`, `.blockmap`, `latest.yml` 을 올립니다.
 
 설치된 앱은 시작 후와 30분마다 최신 릴리즈를 확인해 자동으로 내려받고, 알림 카드/푸터의 버튼으로 재설치합니다.
 
