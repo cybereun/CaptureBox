@@ -23,7 +23,8 @@ let assets = [];
 let settings = { autoCopy: true };
 
 let storeError = '';
-const defaultDir = () => path.join(app.getPath('userData'), 'assets');
+const defaultDir = () => path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
+const legacyDir = () => path.join(app.getPath('userData'), 'assets');         // v1.0.1 이하의 기본 위치
 
 function initStore() {
   settingsFile = path.join(app.getPath('userData'), 'settings.json');
@@ -36,6 +37,16 @@ function initStore() {
       fs.accessSync(settings.assetsDir, fs.constants.W_OK);
       assetsDir = settings.assetsDir;
     } catch { storeError = `지정한 폴더를 사용할 수 없어 임시로 기본 위치를 사용합니다: ${settings.assetsDir}`; }
+  }
+  // 예전 기본 위치에 보관함이 있으면 새 기본 위치로 옮긴다.
+  if (!settings.assetsDir && fs.existsSync(path.join(legacyDir(), 'index.json'))) {
+    const target = assetsDir;
+    assetsDir = legacyDir();
+    indexFile = path.join(assetsDir, 'index.json');
+    try { assets = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch { assets = []; }
+    assets = assets.filter((a) => fs.existsSync(imgPath(a.id)));
+    try { moveStore(target); } catch (e) { storeError = `기본 폴더로 옮기지 못했습니다: ${e.message}`; }
+    return;
   }
   fs.mkdirSync(assetsDir, { recursive: true });
   indexFile = path.join(assetsDir, 'index.json');
