@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src data:; style-src 'self' 'unsafe-inline'">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; cursor: crosshair; user-select: none; background: #000; }
+  #bg { position: fixed; inset: 0; background-size: 100% 100%; }
+  #dim { position: fixed; inset: 0; background: rgba(0,0,0,.45); }
+  #sel { position: fixed; display: none; border: 2px solid #4c8dff; box-sizing: border-box;
+         box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  #tag { position: fixed; display: none; padding: 3px 8px; border-radius: 4px; background: #1f2430; color: #fff;
+         font: 600 12px 'Segoe UI','Malgun Gothic',sans-serif; white-space: nowrap; }
+  #hint { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); padding: 8px 14px; border-radius: 8px;
+          background: #1f2430; color: #fff; font: 500 14px 'Segoe UI','Malgun Gothic',sans-serif; }
+</style>
+</head>
+<body>
+<div id="bg"></div><div id="dim"></div><div id="sel"></div><div id="tag"></div>
+<div id="hint">드래그해서 영역 선택 · Esc 취소</div>
+<script src="overlay.js"></script>
+</body>
+</html>

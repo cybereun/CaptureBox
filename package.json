@@ -1,0 +1,57 @@
+{
+  "name": "capturebox",
+  "productName": "CaptureBox",
+  "version": "1.0.0",
+  "description": "영역·창·전체·스크롤 캡처와 에셋 보관함",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/stitch.test.js",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^25.1.8"
+  },
+  "author": "cybereun",
+  "build": {
+    "appId": "com.cybereun.capturebox",
+    "productName": "CaptureBox",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "stitch.js",
+      "input.ps1",
+      "ui/**",
+      "assets/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "input.ps1"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "cybereun",
+        "repo": "CaptureBox"
+      }
+    ]
+  }
+}

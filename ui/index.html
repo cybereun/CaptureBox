@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self'">
+<title>CaptureBox</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="icon.png" alt="">CaptureBox</div>
+  <div class="modes">
+    <button data-mode="region" title="영역 캡처 (Ctrl+Alt+1)"><i>▭</i>영역</button>
+    <button data-mode="window" title="창 캡처"><i>❐</i>창</button>
+    <button data-mode="fullscreen" title="전체 화면 (Ctrl+Alt+2)"><i>▣</i>전체 화면</button>
+    <button data-mode="scroll" title="스크롤 캡처 (Ctrl+Alt+3)"><i>⇳</i>스크롤</button>
+  </div>
+  <label class="opt">지연
+    <select id="delay">
+      <option value="0">없음</option><option value="3">3초</option>
+      <option value="5">5초</option><option value="10">10초</option>
+    </select>
+  </label>
+  <label class="opt"><input type="checkbox" id="autoCopy"> 캡처 후 자동 복사</label>
+  <button id="openSettings" class="gear" title="설정">⚙ 설정</button>
+</header>
+
+<main>
+  <section id="stage">
+    <div id="empty" class="empty">
+      <div class="big">캡처를 시작해 보세요</div>
+      <p>위의 버튼이나 단축키로 캡처하면 오른쪽 에셋 목록에 쌓입니다.</p>
+      <p class="keys"><kbd>Ctrl+Alt+1</kbd> 영역 &nbsp; <kbd>Ctrl+Alt+2</kbd> 전체 화면 &nbsp; <kbd>Ctrl+Alt+3</kbd> 스크롤</p>
+    </div>
+    <div id="viewer" hidden>
+      <div class="bar">
+        <input id="name" spellcheck="false" aria-label="에셋 이름">
+        <span id="meta"></span>
+        <div class="actions">
+          <button id="fit">100%</button>
+          <span id="zoomLabel" title="Ctrl+휠로 확대/축소"></span>
+          <button id="edit">편집</button>
+          <button id="copy">복사</button>
+          <button id="save">저장…</button>
+          <button id="reveal">폴더</button>
+          <button id="del" class="danger">삭제</button>
+        </div>
+      </div>
+      <div id="canvas"><img id="preview" alt=""></div>
+    </div>
+  </section>
+
+  <aside id="panel">
+    <div class="phead"><b>에셋</b><span id="count">0</span></div>
+    <div id="list"></div>
+    <div class="pfoot">클릭: 미리보기 · 더블클릭: 복사 · 끌어서 다른 앱에 놓기</div>
+  </aside>
+</main>
+
+<footer id="footer">
+  <span id="ftStatus"></span>
+  <span class="grow"></span>
+  <button id="ftUpdate" class="upd" hidden></button>
+  <span id="ftVersion"></span>
+</footer>
+
+<div id="updCard" hidden>
+  <b id="updTitle"></b>
+  <p id="updNote"></p>
+  <div><button id="updNow" class="primary">지금 업데이트</button> <button id="updLater">나중에</button></div>
+</div>
+
+<div id="settings" class="modal" hidden>
+  <div class="card">
+    <div class="phead"><b>설정</b><button id="setClose">닫기</button></div>
+    <div class="sbody">
+      <h3>저장 폴더</h3>
+      <div class="srow">
+        <code id="storeDir" class="path"></code>
+      </div>
+      <div class="srow">
+        <button id="storeChoose">폴더 변경…</button>
+        <button id="storeOpen">폴더 열기</button>
+        <button id="storeReset">기본 위치로</button>
+        <span id="storeMsg" class="muted"></span>
+      </div>
+      <p class="hint">한 번 지정한 폴더는 다시 바꾸기 전까지 유지됩니다. 변경하면 기존 캡처도 새 폴더로 옮겨집니다.</p>
+      <h3>업데이트</h3>
+      <div class="srow">
+        <span>현재 버전 <b id="setVer"></b></span>
+        <span id="setUpd" class="muted"></span>
+        <button id="setCheck">업데이트 확인</button>
+        <button id="setInstall" class="primary" hidden>재시작하여 설치</button>
+      </div>
+      <h3>사용 도움말</h3>
+      <ul class="help">
+        <li><b>영역</b> (Ctrl+Alt+1): 화면이 멈추면 드래그로 영역을 고릅니다. Esc로 취소합니다.</li>
+        <li><b>창</b>: 열린 창 목록에서 캡처할 창을 고릅니다.</li>
+        <li><b>전체 화면</b> (Ctrl+Alt+2): 마우스가 있는 모니터 전체를 캡처합니다.</li>
+        <li><b>스크롤</b> (Ctrl+Alt+3): 스크롤되는 부분만 드래그하면 자동으로 내려가며 한 장으로 이어 붙입니다.</li>
+        <li><b>지연</b>: 3/5/10초 뒤에 캡처합니다. <b>자동 복사</b>를 켜면 캡처 직후 클립보드에 복사됩니다.</li>
+        <li><b>에셋 목록</b>: 클릭=미리보기, 더블클릭=복사, 끌어서 다른 앱에 놓기, Delete=삭제.</li>
+        <li><b>확대·축소</b>: 미리보기 위에서 Ctrl+마우스 휠. 이미지 클릭 또는 맞춤/100% 버튼으로 되돌립니다.</li>
+        <li><b>편집</b>: 사각틀(R) · 원형틀(O) · 선/밑줄(L) · 화살표(A) · 문자(T) · 자르기(C, Enter로 적용). Shift=정비율/각도 고정, Ctrl+Z/Y=취소/다시. 저장하면 새 에셋으로 추가됩니다.</li>
+        <li>에셋 저장 위치: 설정의 <b>저장 폴더</b>에서 확인·변경</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="picker" class="modal" hidden>
+  <div class="card">
+    <div class="phead"><b>캡처할 창 선택</b><button id="pickClose">닫기</button></div>
+    <div id="winGrid"></div>
+  </div>
+</div>
+<div id="editor" class="modal ed" hidden>
+  <div class="edbar">
+    <div class="tools" id="edTools">
+      <button data-tool="rect" title="사각틀 (R)">▭ 사각틀</button>
+      <button data-tool="ellipse" title="원형틀 (O)">◯ 원형틀</button>
+      <button data-tool="line" title="선/밑줄 (L)">／ 선·밑줄</button>
+      <button data-tool="arrow" title="화살표 (A)">➚ 화살표</button>
+      <button data-tool="text" title="문자 (T)">T 문자</button>
+      <button data-tool="crop" title="자르기 (C)">✂ 자르기</button>
+    </div>
+    <label class="opt">색 <input type="color" id="edColor" value="#ff3b30"></label>
+    <label class="opt">굵기 <select id="edWidth"><option value="2">얇게</option><option value="4" selected>보통</option><option value="8">굵게</option><option value="14">아주 굵게</option></select></label>
+    <label class="opt">글자 <select id="edSize"><option value="20">20</option><option value="28" selected>28</option><option value="40">40</option><option value="60">60</option><option value="90">90</option></select></label>
+    <button id="edUndo" title="실행 취소 (Ctrl+Z)">↶</button>
+    <button id="edRedo" title="다시 실행 (Ctrl+Y)">↷</button>
+    <span class="grow"></span>
+    <button id="edCancel">취소</button>
+    <button id="edSave" class="primary">새 에셋으로 저장</button>
+  </div>
+  <div id="edStage"><div id="edWrap"><canvas id="edCanvas"></canvas></div></div>
+</div>
+<div id="toast" hidden></div>
+<script src="app.js"></script>
+<script src="editor.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>
