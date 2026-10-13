@@ -8,13 +8,210 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec0ff"/><stop offset="1" stop-color="#2f6df0"/></linearGradient>
+    <linearGradient id="gBlueD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a58c9"/><stop offset="1" stop-color="#173a8f"/></linearGradient>
+    <linearGradient id="gOrange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd08a"/><stop offset="1" stop-color="#ff7a1a"/></linearGradient>
+    <linearGradient id="gOrangeD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9620f"/><stop offset="1" stop-color="#9c3f06"/></linearGradient>
+    <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ff0b8"/><stop offset="1" stop-color="#16a05a"/></linearGradient>
+    <linearGradient id="gGreenD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#128a4c"/><stop offset="1" stop-color="#0a5c31"/></linearGradient>
+    <linearGradient id="gPurple" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfb2ff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+    <linearGradient id="gPurpleD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a2bd0"/><stop offset="1" stop-color="#43168f"/></linearGradient>
+    <linearGradient id="gSlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d3dcec"/><stop offset="1" stop-color="#7586a6"/></linearGradient>
+    <linearGradient id="gSlateD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d6d8c"/><stop offset="1" stop-color="#3a4764"/></linearGradient>
+    <linearGradient id="gBezel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56688c"/><stop offset="1" stop-color="#27334d"/></linearGradient>
+    <linearGradient id="gScreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ef0c6"/><stop offset="1" stop-color="#1fb26a"/></linearGradient>
+    <linearGradient id="gGloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+
+    <linearGradient id="gYellow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset="1" stop-color="#f5a800"/></linearGradient>
+    <linearGradient id="gYellowD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d98a00"/><stop offset="1" stop-color="#9a5e00"/></linearGradient>
+    <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8f86"/><stop offset="1" stop-color="#e3342b"/></linearGradient>
+    <linearGradient id="gRedD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0241c"/><stop offset="1" stop-color="#861510"/></linearGradient>
+    <linearGradient id="gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8bf0e6"/><stop offset="1" stop-color="#0e9f95"/></linearGradient>
+    <linearGradient id="gTealD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b8279"/><stop offset="1" stop-color="#06524c"/></linearGradient>
+  </defs>
+
+  <symbol id="i-region" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="44" rx="15" ry="2.6" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="10" fill="url(#gBlueD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="10" fill="url(#gBlue)"/>
+    <path d="M9 17C9 9 14 6 22 6h4c8 0 13 3 13 11 0 3-8 4-15 4S9 20 9 17z" fill="url(#gGloss)" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 19v-6h6"/><path d="M29 13h6v6"/><path d="M13 27v6h6"/><path d="M35 27v6h-6"/>
+    </g>
+    <rect x="20" y="20" width="8" height="8" rx="2.4" fill="#fff" opacity=".95"/>
+  </symbol>
+
+  <symbol id="i-window" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="44" rx="15" ry="2.6" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="9" fill="url(#gOrangeD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="9" fill="url(#gOrange)"/>
+    <path d="M9 14C9 8 13 6 20 6h8c7 0 11 2 11 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <circle cx="12" cy="11" r="1.9" fill="#fff"/><circle cx="17.5" cy="11" r="1.9" fill="#fff" opacity=".85"/><circle cx="23" cy="11" r="1.9" fill="#fff" opacity=".7"/>
+    <rect x="9.5" y="17" width="29" height="18" rx="3.5" fill="#fff" opacity=".95"/>
+    <rect x="13" y="21" width="14" height="3" rx="1.5" fill="#ffb067"/><rect x="13" y="27" width="21" height="3" rx="1.5" fill="#ffd2a3"/>
+  </symbol>
+
+  <symbol id="i-full" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="15" y="39" width="18" height="5" rx="2.5" fill="url(#gBezel)"/>
+    <rect x="20.5" y="32" width="7" height="8" fill="url(#gBezel)"/>
+    <rect x="4" y="5" width="40" height="29" rx="6" fill="url(#gBezel)"/>
+    <rect x="8" y="9" width="32" height="21" rx="3" fill="url(#gScreen)"/>
+    <path d="M8 18c0-6 2-9 8-9h16c6 0 8 3 8 9-5 3-14 3-16 3S13 21 8 18z" fill="url(#gGloss)" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 17v-4h4"/><path d="M31 13h4v4"/><path d="M13 22v4h4"/><path d="M35 22v4h-4"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-scroll" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="9" y="8" width="30" height="36" rx="8" fill="url(#gPurpleD)"/>
+    <rect x="9" y="3" width="30" height="36" rx="8" fill="url(#gPurple)"/>
+    <path d="M12 14C12 7 15 5 21 5h6c6 0 9 2 9 9 0 2-6 3-12 3s-12-1-12-3z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="15" y="10" width="18" height="3" rx="1.5" fill="#fff" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M24 18v14"/><path d="M17.5 26.5 24 33l6.5-6.5"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-gear" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="url(#gSlateD)">
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(45 24 22)"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(90 24 22)"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(135 24 22)"/>
+      <circle cx="24" cy="22" r="14.5"/>
+    </g>
+    <g fill="url(#gSlate)">
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(45 24 21)"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(90 24 21)"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(135 24 21)"/>
+      <circle cx="24" cy="21" r="14.5"/>
+    </g>
+    <path d="M12 16c3-6 8-8 12-8s9 2 12 8c-5 3-19 3-24 0z" fill="url(#gGloss)" opacity=".8"/>
+    <circle cx="24" cy="21" r="6.2" fill="#eef3fb"/><circle cx="24" cy="21" r="6.2" fill="none" stroke="#5d6d8c" stroke-width="1.4" opacity=".6"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="rotate(45 24 24) translate(0 3)" fill="url(#gYellowD)"><rect x="18" y="2" width="12" height="30" rx="2.5"/><path d="M18 32h12l-6 12z"/></g>
+    <g transform="rotate(45 24 24)">
+      <rect x="18" y="2" width="12" height="30" rx="2.5" fill="url(#gYellow)"/>
+      <rect x="18" y="2" width="12" height="6" rx="2.5" fill="#ff8f86"/>
+      <rect x="18" y="8" width="12" height="3.5" fill="url(#gSlate)"/>
+      <path d="M18 32h12l-6 12z" fill="#ffe2b8"/><path d="M22 40.5h4L24 44z" fill="#3a4764"/>
+      <rect x="20" y="4" width="3" height="26" rx="1.5" fill="#fff" opacity=".45"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-copy" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="15" y="11" width="26" height="31" rx="7" fill="url(#gBlueD)"/>
+    <rect x="15" y="8" width="26" height="31" rx="7" fill="url(#gBlue)" opacity=".7"/>
+    <rect x="6" y="9" width="26" height="31" rx="7" fill="url(#gBlueD)"/>
+    <rect x="6" y="5" width="26" height="31" rx="7" fill="url(#gBlue)"/>
+    <path d="M9 14c0-6 3-8 8-8h6c5 0 8 2 8 8 0 2-5 3-11 3s-11-1-11-3z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="11" y="15" width="16" height="3" rx="1.5" fill="#fff" opacity=".9"/><rect x="11" y="21" width="16" height="3" rx="1.5" fill="#fff" opacity=".75"/><rect x="11" y="27" width="10" height="3" rx="1.5" fill="#fff" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-save" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="36" rx="8" fill="url(#gGreenD)"/>
+    <rect x="5" y="4" width="38" height="36" rx="8" fill="url(#gGreen)"/>
+    <path d="M9 14c0-6 3-8 9-8h12c6 0 9 2 9 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="14" y="4" width="20" height="13" rx="3" fill="#fff" opacity=".96"/><rect x="27" y="7" width="4" height="7" rx="1.5" fill="#16a05a"/>
+    <rect x="11" y="24" width="26" height="14" rx="3.5" fill="#fff" opacity=".96"/><rect x="15" y="28" width="14" height="2.6" rx="1.3" fill="#8fd9ae"/><rect x="15" y="33" width="10" height="2.6" rx="1.3" fill="#c6ecd6"/>
+  </symbol>
+
+  <symbol id="i-folder" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="16" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M4 12c0-3 2-5 5-5h10l5 5h15c3 0 5 2 5 5v21c0 3-2 5-5 5H9c-3 0-5-2-5-5z" fill="url(#gYellowD)"/>
+    <path d="M4 14c0-3 2-5 5-5h10l5 5h15c3 0 5 2 5 5v3H4z" fill="url(#gYellow)" opacity=".85"/>
+    <rect x="4" y="17" width="40" height="23" rx="5" fill="url(#gYellow)"/>
+    <path d="M7 24c0-4 2-6 6-6h22c4 0 6 2 6 6-6 3-34 3-34 0z" fill="url(#gGloss)" opacity=".7"/>
+  </symbol>
+
+  <symbol id="i-trash" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M10 16h28l-2.4 25c-.2 2-1.6 3.4-3.6 3.4H16c-2 0-3.4-1.4-3.6-3.4z" fill="url(#gRedD)"/>
+    <path d="M10 13h28l-2.4 25c-.2 2-1.6 3.4-3.6 3.4H16c-2 0-3.4-1.4-3.6-3.4z" fill="url(#gRed)"/>
+    <rect x="6" y="8" width="36" height="7" rx="3.5" fill="url(#gRedD)"/><rect x="6" y="6" width="36" height="7" rx="3.5" fill="url(#gRed)"/>
+    <rect x="18" y="2" width="12" height="6" rx="3" fill="url(#gRed)"/><rect x="21" y="4.5" width="6" height="2.2" rx="1.1" fill="#861510" opacity=".6"/>
+    <g stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".92"><path d="M17 20l1 15"/><path d="M24 20v15"/><path d="M31 20l-1 15"/></g>
+  </symbol>
+
+  <symbol id="i-select" viewBox="0 0 48 48">
+    <ellipse cx="26" cy="45" rx="11" ry="2.2" fill="#000" opacity=".2"/>
+    <path d="M13 8v31l8.5-7.5 5.5 12 6-2.8-5.5-11.6H35z" fill="url(#gBlueD)" transform="translate(0 2.5)"/>
+    <path d="M13 6v31l8.5-7.5 5.5 12 6-2.8-5.5-11.6H35z" fill="url(#gBlue)" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M16 12v14l4.5-4c.6-.5 1.2-.6 2-.6h5z" fill="url(#gGloss)" opacity=".8"/>
+  </symbol>
+
+  <symbol id="i-rect" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="7" y="12" width="34" height="27" rx="6" fill="none" stroke="url(#gRedD)" stroke-width="6"/>
+    <rect x="7" y="9" width="34" height="27" rx="6" fill="none" stroke="url(#gRed)" stroke-width="6"/>
+    <path d="M12 12c4-2 20-2 24 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-ellipse" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <ellipse cx="24" cy="26" rx="17" ry="13" fill="none" stroke="url(#gOrangeD)" stroke-width="6"/>
+    <ellipse cx="24" cy="23" rx="17" ry="13" fill="none" stroke="url(#gOrange)" stroke-width="6"/>
+    <path d="M12 17c4-4 20-4 24 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-line" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M9 38 39 10" stroke="url(#gPurpleD)" stroke-width="7" stroke-linecap="round" transform="translate(0 3)"/>
+    <path d="M9 38 39 10" stroke="url(#gPurple)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M12 33 33 13" stroke="#fff" stroke-width="1.8" stroke-linecap="round" opacity=".55"/>
+  </symbol>
+
+  <symbol id="i-arrow" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="url(#gGreenD)" stroke="url(#gGreenD)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 38 35 12" fill="none"/><path d="M20 10h18v18z"/></g>
+    <g fill="url(#gGreen)" stroke="url(#gGreen)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 38 35 12" fill="none"/><path d="M20 10h18v18z"/></g>
+  </symbol>
+
+  <symbol id="i-text" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="9" fill="url(#gPurpleD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="9" fill="url(#gPurple)"/>
+    <path d="M9 14c0-6 4-8 10-8h10c6 0 10 2 10 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <path d="M13 13h22M24 13v22" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none"/>
+  </symbol>
+
+  <symbol id="i-crop" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="none" stroke="url(#gTealD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v25a5 5 0 0 0 5 5h25"/><path d="M3 13h25a5 5 0 0 1 5 5v25"/></g>
+    <g fill="none" stroke="url(#gTeal)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v25a5 5 0 0 0 5 5h25"/><path d="M3 13h25a5 5 0 0 1 5 5v25"/></g>
+  </symbol>
+
+  <symbol id="i-undo" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="none" stroke="url(#gBlueD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+    <g fill="none" stroke="url(#gBlue)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+  </symbol>
+
+  <symbol id="i-redo" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(48 0) scale(-1 1)">
+      <g transform="translate(0 3)" fill="none" stroke="url(#gBlueD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+      <g fill="none" stroke="url(#gBlue)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+    </g>
+  </symbol>
+</svg>
 <header class="top">
   <div class="brand"><img src="icon.png" alt="">CaptureBox</div>
   <div class="modes">
-    <button data-mode="region" title="영역 캡처 (Ctrl+Alt+1)"><i>▭</i>영역</button>
-    <button data-mode="window" title="창 캡처"><i>❐</i>창</button>
-    <button data-mode="fullscreen" title="전체 화면 (Ctrl+Alt+2)"><i>▣</i>전체 화면</button>
-    <button data-mode="scroll" title="스크롤 캡처 (Ctrl+Alt+3)"><i>⇳</i>스크롤</button>
+    <button data-mode="region" title="영역 캡처 (Ctrl+Alt+1)"><svg class="ico" aria-hidden="true"><use href="#i-region"/></svg><span>영역</span></button>
+    <button data-mode="window" title="창 캡처"><svg class="ico" aria-hidden="true"><use href="#i-window"/></svg><span>창</span></button>
+    <button data-mode="fullscreen" title="전체 화면 (Ctrl+Alt+2)"><svg class="ico" aria-hidden="true"><use href="#i-full"/></svg><span>전체 화면</span></button>
+    <button data-mode="scroll" title="스크롤 캡처 (Ctrl+Alt+3)"><svg class="ico" aria-hidden="true"><use href="#i-scroll"/></svg><span>스크롤</span></button>
   </div>
   <label class="opt">지연
     <select id="delay">
@@ -23,7 +220,7 @@
     </select>
   </label>
   <label class="opt"><input type="checkbox" id="autoCopy"> 캡처 후 자동 복사</label>
-  <button id="openSettings" class="gear" title="설정">⚙ 설정</button>
+  <button id="openSettings" class="gear" title="설정"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg><span>설정</span></button>
 </header>
 
 <main>
@@ -41,11 +238,11 @@
         <div class="actions">
           <button id="fit">100%</button>
           <span id="zoomLabel" title="Ctrl+휠로 확대/축소"></span>
-          <button id="edit" class="primary" title="주석·도형·문자·자르기">✎ 편집</button>
-          <button id="copy">복사</button>
-          <button id="save">저장…</button>
-          <button id="reveal">폴더</button>
-          <button id="del" class="danger">삭제</button>
+          <button id="edit" class="ib strong" title="주석·도형·문자·자르기"><svg class="ico-s" aria-hidden="true"><use href="#i-edit"/></svg><span>편집</span></button>
+          <button id="copy" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-copy"/></svg><span>복사</span></button>
+          <button id="save" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-save"/></svg><span>저장…</span></button>
+          <button id="reveal" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-folder"/></svg><span>폴더</span></button>
+          <button id="del" class="ib danger"><svg class="ico-s" aria-hidden="true"><use href="#i-trash"/></svg><span>삭제</span></button>
         </div>
       </div>
       <div id="canvas"><img id="preview" alt=""></div>
@@ -129,20 +326,20 @@
 <div id="editor" class="modal ed" hidden>
   <div class="edbar">
     <div class="tools" id="edTools">
-      <button data-tool="select" title="선택·이동 (V)">☝ 선택</button>
-      <button data-tool="rect" title="사각틀 (R)">▭ 사각틀</button>
-      <button data-tool="ellipse" title="원형틀 (O)">◯ 원형틀</button>
-      <button data-tool="line" title="선/밑줄 (L)">／ 선·밑줄</button>
-      <button data-tool="arrow" title="화살표 (A)">➚ 화살표</button>
-      <button data-tool="text" title="문자 (T)">T 문자</button>
-      <button data-tool="crop" title="자르기 (C)">✂ 자르기</button>
+      <button class="ib" data-tool="select" title="선택·이동 (V)"><svg class="ico-s" aria-hidden="true"><use href="#i-select"/></svg><span>선택</span></button>
+      <button class="ib" data-tool="rect" title="사각틀 (R)"><svg class="ico-s" aria-hidden="true"><use href="#i-rect"/></svg><span>사각틀</span></button>
+      <button class="ib" data-tool="ellipse" title="원형틀 (O)"><svg class="ico-s" aria-hidden="true"><use href="#i-ellipse"/></svg><span>원형틀</span></button>
+      <button class="ib" data-tool="line" title="선/밑줄 (L)"><svg class="ico-s" aria-hidden="true"><use href="#i-line"/></svg><span>선·밑줄</span></button>
+      <button class="ib" data-tool="arrow" title="화살표 (A)"><svg class="ico-s" aria-hidden="true"><use href="#i-arrow"/></svg><span>화살표</span></button>
+      <button class="ib" data-tool="text" title="문자 (T)"><svg class="ico-s" aria-hidden="true"><use href="#i-text"/></svg><span>문자</span></button>
+      <button class="ib" data-tool="crop" title="자르기 (C)"><svg class="ico-s" aria-hidden="true"><use href="#i-crop"/></svg><span>자르기</span></button>
     </div>
     <label class="opt">색 <input type="color" id="edColor" value="#ff3b30"></label>
     <label class="opt">굵기 <select id="edWidth"><option value="2">얇게</option><option value="4" selected>보통</option><option value="8">굵게</option><option value="14">아주 굵게</option></select></label>
     <label class="opt">글자 <select id="edSize"><option value="20">20</option><option value="28" selected>28</option><option value="40">40</option><option value="60">60</option><option value="90">90</option></select></label>
     <label class="opt"><input type="checkbox" id="edBgOn"> 글자 배경 <input type="color" id="edBg" value="#ffe14d"></label>
-    <button id="edUndo" title="실행 취소 (Ctrl+Z)">↶</button>
-    <button id="edRedo" title="다시 실행 (Ctrl+Y)">↷</button>
+    <button id="edUndo" class="ib" title="실행 취소 (Ctrl+Z)"><svg class="ico-s" aria-hidden="true"><use href="#i-undo"/></svg></button>
+    <button id="edRedo" class="ib" title="다시 실행 (Ctrl+Y)"><svg class="ico-s" aria-hidden="true"><use href="#i-redo"/></svg></button>
     <span class="grow"></span>
     <button id="edCancel">취소</button>
     <button id="edSave" class="primary">새 에셋으로 저장</button>
