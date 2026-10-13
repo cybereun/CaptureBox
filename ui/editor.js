@@ -21,7 +21,42 @@
   window.addEventListener('resize', () => { if (!$('editor').hidden) fit(); });
   function sync() { $('edUndo').disabled = !undo.length; $('edRedo').disabled = !redo.length; }
 
+  /* 모자이크/블러: 바탕 이미지의 해당 영역을 가린다 (바탕 위에서 매번 다시 계산) */
+  function drawObscure(c, s) {
+    const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2), w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
+    if (w < 2 || h < 2) return;
+    c.save();
+    c.beginPath(); c.rect(x, y, w, h); c.clip();
+    if (s.t === 'mosaic') {
+      const bs = 6 + s.w * 2, sw = Math.max(1, Math.ceil(w / bs)), sh = Math.max(1, Math.ceil(h / bs));
+      const t = document.createElement('canvas'); t.width = sw; t.height = sh;
+      t.getContext('2d').drawImage(base, x, y, w, h, 0, 0, sw, sh);
+      c.imageSmoothingEnabled = false;
+      c.drawImage(t, 0, 0, sw, sh, x, y, sw * bs, sh * bs);
+    } else {
+      c.filter = `blur(${4 + s.w * 1.5}px)`;
+      c.drawImage(base, 0, 0);
+    }
+    c.restore();
+  }
+
   function drawShape(c, s) {
+    if (s.t === 'mosaic' || s.t === 'blur') { drawObscure(c, s); return; }
+    if (s.t === 'highlight') {
+      c.save(); c.globalCompositeOperation = 'multiply'; c.globalAlpha = 0.6; c.fillStyle = s.color;
+      c.fillRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
+      c.restore(); return;
+    }
+    if (s.t === 'step') {
+      const r = s.size * 0.6;
+      c.save();
+      c.beginPath(); c.arc(s.x1, s.y1, r, 0, Math.PI * 2); c.fillStyle = s.color; c.fill();
+      c.lineWidth = Math.max(2, r * 0.12); c.strokeStyle = '#fff'; c.stroke();
+      c.fillStyle = '#fff'; c.font = `800 ${Math.round(r * 1.15)}px "Segoe UI","Malgun Gothic",sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(String(s.n), s.x1, s.y1 + r * 0.06);
+      c.restore(); return;
+    }
     c.strokeStyle = c.fillStyle = s.color; c.lineWidth = s.w; c.lineCap = c.lineJoin = 'round';
     if (s.t === 'rect') c.strokeRect(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1));
     else if (s.t === 'ellipse') {
@@ -52,6 +87,7 @@
 
   /* 선택/이동용 경계와 적중 검사 */
   function bounds(s) {
+    if (s.t === 'step') { const r = s.size * 0.6; return { x: s.x1 - r, y: s.y1 - r, w: r * 2, h: r * 2 }; }
     if (s.t === 'text') {
       ctx.font = `700 ${s.size}px "Malgun Gothic", sans-serif`;
       const lines = s.text.split('\n');
@@ -68,6 +104,8 @@
   function hits(s, p) {
     const tol = Math.max(10 * cv.width / Math.max(1, cv.clientWidth), (s.w || 0) / 2 + 4);
     const b = bounds(s);
+    if (s.t === 'step') return Math.hypot(p.x - s.x1, p.y - s.y1) <= s.size * 0.6 + 4;
+    if (s.t === 'highlight' || s.t === 'mosaic' || s.t === 'blur') return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
     if (s.t === 'text') return p.x >= b.x - 4 && p.x <= b.x + b.w + 4 && p.y >= b.y - 4 && p.y <= b.y + b.h + 4;
     if (s.t === 'line' || s.t === 'arrow') return segDist(p.x, p.y, s.x1, s.y1, s.x2, s.y2) <= tol;
     if (s.t === 'rect') {
@@ -110,7 +148,7 @@
   function constrain(s, shift) {
     if (!shift) return;
     const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
-    if (s.t === 'rect' || s.t === 'ellipse') { const m = Math.max(Math.abs(dx), Math.abs(dy)); s.x2 = s.x1 + Math.sign(dx || 1) * m; s.y2 = s.y1 + Math.sign(dy || 1) * m; }
+    if (['rect', 'ellipse', 'highlight', 'mosaic', 'blur'].includes(s.t)) { const m = Math.max(Math.abs(dx), Math.abs(dy)); s.x2 = s.x1 + Math.sign(dx || 1) * m; s.y2 = s.y1 + Math.sign(dy || 1) * m; }
     else { const a = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4), d = Math.hypot(dx, dy); s.x2 = s.x1 + d * Math.cos(a); s.y2 = s.y1 + d * Math.sin(a); }
   }
 
@@ -123,6 +161,13 @@
     if (tool === 'select') {
       sel = hitTop(p);
       if (sel >= 0) { drag = { sx: p.x, sy: p.y, orig: JSON.parse(JSON.stringify(shapes[sel])), moved: false }; syncControls(); }
+      draw();
+      return;
+    }
+    if (tool === 'step') {
+      pushUndo();
+      const n = 1 + Math.max(0, ...shapes.filter((x) => x.t === 'step').map((x) => x.n));
+      shapes.push({ t: 'step', x1: p.x, y1: p.y, n, size: Number($('edSize').value), color: $('edColor').value });
       draw();
       return;
     }
@@ -191,7 +236,10 @@
     draw();
   }
 
+  const lastColor = {};   // 도구별 마지막 색 (형광펜은 노랑, 나머지는 빨강이 기본)
   function setTool(t) {
+    if (tool !== 'select') lastColor[tool] = $('edColor').value;
+    if (t !== 'select') $('edColor').value = lastColor[t] || (t === 'highlight' ? '#ffe14d' : '#ff3b30');
     commitText(); cropRect = null; drag = null; if (t !== 'select') sel = -1; tool = t; draw();
     for (const b of $('edTools').children) b.classList.toggle('on', b.dataset.tool === t);
     cv.style.cursor = t === 'text' ? 'text' : t === 'select' ? 'default' : 'crosshair';
@@ -202,7 +250,8 @@
   function syncControls() {
     const s = shapes[sel]; if (!s) return;
     $('edColor').value = s.color;
-    if (s.t === 'text') { $('edSize').value = String(s.size); $('edBgOn').checked = !!s.bg; if (s.bg) $('edBg').value = s.bg; }
+    if (s.t === 'step') $('edSize').value = String(s.size);
+    else if (s.t === 'text') { $('edSize').value = String(s.size); $('edBgOn').checked = !!s.bg; if (s.bg) $('edBg').value = s.bg; }
     else $('edWidth').value = String(s.w);
   }
   function applyToSel(fn) {
@@ -211,7 +260,7 @@
   }
   $('edColor').addEventListener('change', () => applyToSel((s) => { s.color = $('edColor').value; }));
   $('edWidth').addEventListener('change', () => applyToSel((s) => { if (s.t !== 'text') s.w = Number($('edWidth').value); }));
-  $('edSize').addEventListener('change', () => applyToSel((s) => { if (s.t === 'text') s.size = Number($('edSize').value); }));
+  $('edSize').addEventListener('change', () => applyToSel((s) => { if (s.t === 'text' || s.t === 'step') s.size = Number($('edSize').value); }));
   const bgChange = () => applyToSel((s) => { if (s.t === 'text') s.bg = $('edBgOn').checked ? $('edBg').value : null; });
   $('edBgOn').addEventListener('change', bgChange);
   $('edBg').addEventListener('change', bgChange);
@@ -245,7 +294,7 @@
     else if (e.key === 'Escape') { if (cropRect) { cropRect = null; draw(); } else close(); }
     else if (e.key === 'Enter' && cropRect && cropRect.w > 3) applyCrop();
     else if (!e.ctrlKey && !e.altKey && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
-      const m = { v: 'select', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text', c: 'crop' }[k];
+      const m = { v: 'select', h: 'highlight', n: 'step', m: 'mosaic', b: 'blur', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', t: 'text', c: 'crop' }[k];
       if (m) { e.preventDefault(); setTool(m); }
     }
   });

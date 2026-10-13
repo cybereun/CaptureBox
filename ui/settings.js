@@ -89,6 +89,62 @@
     });
   }
 
+  /* 단축키 */
+  const KEYNAME = { ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Space: 'Space', Tab: 'Tab', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown', Insert: 'Insert', Delete: 'Delete' };
+  function comboFrom(e) {
+    const mods = [];
+    if (e.ctrlKey) mods.push('Ctrl');
+    if (e.altKey) mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+    if (e.metaKey) mods.push('Super');
+    const c = e.code;
+    let k = null;
+    if (/^Key[A-Z]$/.test(c)) k = c.slice(3);
+    else if (/^Digit[0-9]$/.test(c)) k = c.slice(5);
+    else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) k = c;
+    else if (KEYNAME[c]) k = KEYNAME[c];
+    return k && mods.length ? [...mods, k].join('+') : null;
+  }
+  function showKeys(st, msg) {
+    for (const b of document.querySelectorAll('.keybox')) { b.textContent = st.keys[b.dataset.mode]; b.classList.remove('listen'); }
+    $('hkRegion').textContent = st.keys.region; $('hkFull').textContent = st.keys.fullscreen; $('hkScroll').textContent = st.keys.scroll;
+    const err = msg || Object.entries(st.errors || {}).map(([m, t]) => `${{ region: '영역', fullscreen: '전체 화면', scroll: '스크롤' }[m]}: ${t}`).join(' / ');
+    $('keyMsg').textContent = err || '';
+  }
+  let listening = null;
+  for (const b of document.querySelectorAll('.keybox')) {
+    b.addEventListener('click', () => { listening = b; b.classList.add('listen'); b.textContent = '키를 누르세요…'; b.focus(); });
+    b.addEventListener('blur', () => { if (listening === b) { listening = null; snap.getHotkeys().then((s) => showKeys(s)); } });
+    b.addEventListener('keydown', async (e) => {
+      if (listening !== b) return;
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') { listening = null; showKeys(await snap.getHotkeys()); b.blur(); return; }
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+      const combo = comboFrom(e);
+      listening = null;
+      if (!combo) { showKeys(await snap.getHotkeys(), 'Ctrl, Alt, Shift 중 하나 이상과 일반 키를 함께 눌러 주세요'); return; }
+      const r = await snap.setHotkey(b.dataset.mode, combo);
+      showKeys(r, r.ok ? '' : r.message);
+      if (r.ok) toast('단축키를 변경했습니다');
+    });
+  }
+  $('keyReset').addEventListener('click', async () => { const r = await snap.resetHotkeys(); showKeys(r, r.message); toast('기본 단축키로 되돌렸습니다'); });
+  snap.getHotkeys().then((s) => showKeys(s));
+
+  /* 윈도우 시작 시 자동 실행 */
+  async function loadLogin() {
+    const s = await snap.getLogin();
+    $('optLogin').checked = !!s.enabled;
+    $('optLogin').disabled = !s.supported;
+    $('loginMsg').textContent = s.supported ? '' : '설치본에서만 사용할 수 있습니다 (개발 모드에서는 비활성)';
+  }
+  $('optLogin').addEventListener('change', async () => {
+    const s = await snap.setLogin($('optLogin').checked);
+    $('optLogin').checked = !!s.enabled;
+    toast(s.enabled ? '윈도우 시작 시 자동 실행을 켰습니다' : '윈도우 시작 시 자동 실행을 껐습니다');
+  });
+  loadLogin();
+
   snap.onUpdate((s) => { u = s; render(); });
   snap.getUpdate().then((s) => { u = s; render(); });
 })();

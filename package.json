@@ -1,14 +1,15 @@
 {
   "name": "capturebox",
   "productName": "CaptureBox",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "description": "영역·창·전체·스크롤 캡처와 에셋 보관함",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "test": "node test/stitch.test.js",
     "dist": "electron-builder --win --publish never",
-    "release": "electron-builder --win --publish always"
+    "release": "electron-builder --win --publish always",
+    "verify": "node scripts/verify.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -30,12 +31,15 @@
       "preload.js",
       "stitch.js",
       "input.ps1",
+      "selftest.js",
+      "ocr.ps1",
       "ui/**",
       "assets/**",
       "package.json"
     ],
     "asarUnpack": [
-      "input.ps1"
+      "input.ps1",
+      "ocr.ps1"
     ],
     "win": {
       "target": "nsis",

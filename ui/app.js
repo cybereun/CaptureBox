@@ -163,7 +163,7 @@ $('name').addEventListener('change', async () => {
 $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 
 window.addEventListener('keydown', async (e) => {
-  if (!$('editor').hidden) return;
+  if (!$('editor').hidden || !$('ocrBox').hidden) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === 'Delete') deleteCurrent();
   else if (e.key === 'Escape') $('picker').hidden = true;

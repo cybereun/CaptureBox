@@ -218,10 +218,13 @@ ipcMain.on('overlay:done', (e, rect) => {
 ipcMain.on('overlay:cancel', () => finishPick && finishPick(null));
 
 /* ---------- 스크롤 캡처 ---------- */
+// 설치본에서는 PowerShell이 app.asar 안의 파일을 읽지 못하므로 압축 해제된 위치(app.asar.unpacked)를 쓴다.
+const unpackedPath = (f) => path.join(__dirname, f).replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+
 function startInput() {
   return new Promise((resolve, reject) => {
     // 설치본에서는 app.asar 안의 파일을 PowerShell이 읽지 못하므로 압축 해제된 위치(app.asar.unpacked)를 쓴다.
-    const script = path.join(__dirname, 'input.ps1').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+    const script = unpackedPath('input.ps1');
     const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script], {
       windowsHide: true,
     });
@@ -279,9 +282,11 @@ async function scrollCapture(sel) {
       await sleep(450);
       let r = st.add(await grabCrop());
 
-      if (r.status === 'end') { // 스크롤 애니메이션 지연일 수 있어 한 번 더 확인
-        await sleep(600);
-        r = st.add(await grabCrop());
+      if (r.status === 'end') { // 스크롤 애니메이션·렌더링 지연일 수 있어 여러 번 더 기다리며 확인 (진짜 끝일 때만 약 2초 더 걸림)
+        for (let k = 0; k < 3 && r.status === 'end'; k++) {
+          await sleep(700);
+          r = st.add(await grabCrop());
+        }
         if (r.status === 'end') break;
       }
       if (r.status === 'limit') break;
@@ -482,6 +487,168 @@ ipcMain.handle('update:get', () => upd);
 ipcMain.handle('update:check', () => checkUpdate());
 ipcMain.handle('update:install', () => { if (updater && upd.state === 'ready') updater.quitAndInstall(true, true); });
 
+/* ---------- 글자 인식 (Windows 내장 OCR) ---------- */
+function runPowerShell(script, args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args], { windowsHide: true });
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => { ps.kill(); reject(new Error('글자 인식 시간이 초과되었습니다')); }, timeoutMs);
+    ps.stdout.on('data', (c) => { out += c.toString('utf8'); });
+    ps.stderr.on('data', (c) => { err += c.toString('utf8'); });
+    ps.on('error', (e) => { clearTimeout(timer); reject(e); });
+    ps.on('exit', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(out);
+      else reject(new Error(err.trim().split(/\r?\n/)[0] || '글자 인식에 실패했습니다'));
+    });
+  });
+}
+// 긴 이미지(스크롤 캡처)는 세로로 나눠서 인식한다. OCR 엔진의 한 변 한도는 10000px.
+async function ocrImage(img) {
+  let src = img;
+  let { width, height } = src.getSize();
+  if (width > 9000) { src = src.resize({ width: 9000 }); ({ width, height } = src.getSize()); }
+  if (Math.max(width, height) < 600) { src = src.resize({ width: width * 2, height: height * 2, quality: 'best' }); ({ width, height } = src.getSize()); }
+  const tmp = fs.mkdtempSync(path.join(app.getPath('temp'), 'capturebox-ocr-'));
+  try {
+    const CH = 3500;
+    const files = [];
+    for (let y = 0, i = 0; y < height; y += CH, i++) {
+      const part = height <= CH ? src : src.crop({ x: 0, y, width, height: Math.min(CH, height - y) });
+      const f = path.join(tmp, `p${i}.png`);
+      fs.writeFileSync(f, part.toPNG());
+      files.push(f);
+    }
+    const out = await runPowerShell(unpackedPath('ocr.ps1'), files, 120000);
+    return out.split('<<<CB-CHUNK>>>').map((c) => c.replace(/\r/g, '').trim()).filter(Boolean).join('\n').trim();
+  } finally {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 무시 */ }
+  }
+}
+ipcMain.handle('asset:ocr', async (_e, id) => {
+  if (!findAsset(id)) return { ok: false, message: '이미지를 찾을 수 없습니다' };
+  try {
+    const text = await ocrImage(nativeImage.createFromPath(imgPath(id)));
+    if (!text) return { ok: true, text: '', message: '인식된 글자가 없습니다' };
+    clipboard.writeText(text);
+    return { ok: true, text };
+  } catch (e) { return { ok: false, message: e.message }; }
+});
+ipcMain.handle('text:copy', (_e, text) => { clipboard.writeText(String(text || '')); return true; });
+
+/* ---------- 화면에 고정 (핀) ---------- */
+const pins = new Set();
+const pinAnchor = new Map();
+function createPin(id) {
+  const a = findAsset(id);
+  if (!a) return null;
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  let w = a.width / d.scaleFactor;
+  let h = a.height / d.scaleFactor;
+  const k = Math.min(1, 560 / w, 420 / h);
+  w = Math.max(100, Math.round(w * k));
+  h = Math.max(70, Math.round(h * k));
+  const off = (pins.size % 6) * 28;
+  const pw = new BrowserWindow({
+    x: d.workArea.x + d.workArea.width - w - 24 - off, y: d.workArea.y + 24 + off,
+    width: w, height: h, useContentSize: true, frame: false, resizable: true, minimizable: false, maximizable: false,
+    alwaysOnTop: true, skipTaskbar: true, hasShadow: true, backgroundColor: '#1f2430',
+    webPreferences: { preload: path.join(__dirname, 'ui', 'pin-preload.js'), sandbox: true },
+  });
+  pw.setAlwaysOnTop(true, 'screen-saver');
+  pw.setAspectRatio(w / h);
+  pins.add(pw);
+  pw.on('closed', () => { pins.delete(pw); pinAnchor.delete(pw.id); });
+  pw.loadFile(path.join(__dirname, 'ui', 'pin.html'));
+  pw.webContents.once('did-finish-load', () => {
+    pw.webContents.send('pin:init', 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64'));
+  });
+  return pw;
+}
+const pinOf = (e) => BrowserWindow.fromWebContents(e.sender);
+ipcMain.handle('asset:pin', (_e, id) => !!createPin(id));
+ipcMain.on('pin:begin', (e) => { const w = pinOf(e); if (w) pinAnchor.set(w.id, { pos: w.getPosition(), cur: screen.getCursorScreenPoint() }); });
+ipcMain.on('pin:drag', (e) => {
+  const w = pinOf(e); const an = w && pinAnchor.get(w.id);
+  if (!an) return;
+  const c = screen.getCursorScreenPoint();
+  w.setPosition(an.pos[0] + c.x - an.cur.x, an.pos[1] + c.y - an.cur.y);
+});
+ipcMain.on('pin:zoom', (e, dir) => {
+  const w = pinOf(e); if (!w) return;
+  const [cw, ch] = w.getContentSize();
+  const [x, y] = w.getPosition();
+  const f = dir > 0 ? 1.1 : 1 / 1.1;
+  const nw = Math.max(100, Math.min(4000, Math.round(cw * f)));
+  const nh = Math.max(70, Math.round(nw * ch / cw));
+  w.setPosition(Math.round(x - (nw - cw) / 2), Math.round(y - (nh - ch) / 2));
+  w.setContentSize(nw, nh);
+});
+ipcMain.on('pin:opacity', (e, dir) => {
+  const w = pinOf(e); if (!w) return;
+  w.setOpacity(Math.max(0.2, Math.min(1, w.getOpacity() + (dir > 0 ? 0.1 : -0.1))));
+});
+ipcMain.on('pin:close', (e) => { const w = pinOf(e); if (w) w.close(); });
+
+/* ---------- 단축키 (설정에서 변경 가능) ---------- */
+const DEFAULT_KEYS = { region: 'CommandOrControl+Alt+1', fullscreen: 'CommandOrControl+Alt+2', scroll: 'CommandOrControl+Alt+3' };
+let hotkeyErrors = {};
+const hotkeyOf = (mode) => (settings.hotkeys && settings.hotkeys[mode]) || DEFAULT_KEYS[mode];
+const prettyKey = (a) => String(a).replace('CommandOrControl', 'Ctrl');
+const KEY_RE = /^((Ctrl|Alt|Shift|Super)\+)+([A-Z0-9]|F([1-9]|1[0-9]|2[0-4])|Up|Down|Left|Right|Space|Tab|Home|End|PageUp|PageDown|Insert|Delete)$/;
+function registerHotkeys() {
+  globalShortcut.unregisterAll();
+  hotkeyErrors = {};
+  for (const mode of Object.keys(DEFAULT_KEYS)) {
+    let ok = false;
+    try { ok = globalShortcut.register(hotkeyOf(mode), () => runCapture(mode, 0)); } catch { ok = false; }
+    if (!ok) hotkeyErrors[mode] = '다른 프로그램이 사용 중이어서 등록하지 못했습니다';
+  }
+}
+const hotkeyState = () => ({ keys: Object.fromEntries(Object.keys(DEFAULT_KEYS).map((m) => [m, prettyKey(hotkeyOf(m))])), errors: hotkeyErrors });
+ipcMain.handle('hotkeys:get', () => hotkeyState());
+ipcMain.handle('hotkeys:set', (_e, mode, combo) => {
+  if (!DEFAULT_KEYS[mode]) return { ok: false, message: '알 수 없는 항목입니다', ...hotkeyState() };
+  if (!KEY_RE.test(String(combo))) return { ok: false, message: 'Ctrl, Alt, Shift 중 하나 이상과 일반 키를 함께 눌러 주세요', ...hotkeyState() };
+  const accel = String(combo).replace(/^Ctrl/, 'CommandOrControl').replace(/\+Ctrl\b/, '+CommandOrControl');
+  const same = Object.keys(DEFAULT_KEYS).find((m) => m !== mode && hotkeyOf(m).toLowerCase() === accel.toLowerCase());
+  if (same) return { ok: false, message: '이미 다른 기능에 지정된 단축키입니다', ...hotkeyState() };
+  const prev = hotkeyOf(mode);
+  globalShortcut.unregister(prev);
+  let ok = false;
+  try { ok = globalShortcut.register(accel, () => runCapture(mode, 0)); } catch { ok = false; }
+  if (!ok) {
+    try { globalShortcut.register(prev, () => runCapture(mode, 0)); } catch { /* 무시 */ }
+    return { ok: false, message: '다른 프로그램이 사용 중이어서 등록하지 못했습니다', ...hotkeyState() };
+  }
+  settings.hotkeys = { ...(settings.hotkeys || {}), [mode]: accel };
+  delete hotkeyErrors[mode];
+  saveSettings();
+  buildTrayMenu();
+  return { ok: true, ...hotkeyState() };
+});
+ipcMain.handle('hotkeys:reset', () => {
+  delete settings.hotkeys;
+  saveSettings();
+  registerHotkeys();
+  buildTrayMenu();
+  return { ok: !Object.keys(hotkeyErrors).length, message: Object.keys(hotkeyErrors).length ? '일부 기본 단축키를 다른 프로그램이 사용 중입니다' : '', ...hotkeyState() };
+});
+
+/* ---------- 윈도우 시작 시 자동 실행 (설치본에서만) ---------- */
+const LOGIN_ARGS = ['--hidden'];
+const loginState = () => ({
+  supported: app.isPackaged,
+  enabled: app.isPackaged ? app.getLoginItemSettings({ args: LOGIN_ARGS }).openAtLogin : false,
+});
+ipcMain.handle('login:get', () => loginState());
+ipcMain.handle('login:set', (_e, on) => {
+  if (!app.isPackaged) return { ...loginState(), message: '설치본에서만 사용할 수 있습니다' };
+  app.setLoginItemSettings({ openAtLogin: !!on, args: LOGIN_ARGS });
+  return loginState();
+});
+
 /* ---------- 트레이 상주 ---------- */
 let tray = null;
 let quitting = false;
@@ -495,21 +662,27 @@ function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')).resize({ width: 32, height: 32 });
   tray = new Tray(icon);
   tray.setToolTip('CaptureBox');
+  buildTrayMenu();
+  tray.on('click', showWin);
+}
+function buildTrayMenu() {
+  if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'CaptureBox 열기', click: showWin },
     { type: 'separator' },
-    { label: '영역 캡처   Ctrl+Alt+1', click: () => runCapture('region', 0) },
-    { label: '전체 화면 캡처   Ctrl+Alt+2', click: () => runCapture('fullscreen', 0) },
-    { label: '스크롤 캡처   Ctrl+Alt+3', click: () => runCapture('scroll', 0) },
+    { label: `영역 캡처   ${prettyKey(hotkeyOf('region'))}`, click: () => runCapture('region', 0) },
+    { label: `전체 화면 캡처   ${prettyKey(hotkeyOf('fullscreen'))}`, click: () => runCapture('fullscreen', 0) },
+    { label: `스크롤 캡처   ${prettyKey(hotkeyOf('scroll'))}`, click: () => runCapture('scroll', 0) },
     { type: 'separator' },
     { label: '종료', click: () => { quitting = true; app.quit(); } },
   ]));
-  tray.on('click', showWin);
 }
 
 /* ---------- 앱 ---------- */
+const startHidden = process.argv.includes('--hidden');   // 윈도우 시작 시 자동 실행: 창 없이 트레이로만 시작
 function createWindow() {
   win = new BrowserWindow({
+    show: !startHidden,
     width: 1280, height: 800, minWidth: 820, minHeight: 520, title: `CaptureBox v${app.getVersion()}`,
     backgroundColor: '#14171f', autoHideMenuBar: true,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
@@ -536,8 +709,16 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   initUpdater();
-  const hk = { 'CommandOrControl+Alt+1': 'region', 'CommandOrControl+Alt+2': 'fullscreen', 'CommandOrControl+Alt+3': 'scroll' };
-  for (const [key, mode] of Object.entries(hk)) globalShortcut.register(key, () => runCapture(mode, 0));
+  registerHotkeys();
+  buildTrayMenu();
+  // 설치본 자체 검증 모드: CB_SELFTEST=<리포트 경로> 로 실행하면 핵심 기능을 실제로 돌려 보고서를 쓴다 (npm run verify)
+  if (process.env.CB_SELFTEST) {
+    setTimeout(() => require('./selftest').run({
+      app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path,
+      get win() { return win; }, get tray() { return tray; }, get assets() { return assets; },
+      pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, createPin, runCapture, addAsset, startHidden, unpackedPath,
+    }), 2000);
+  }
 });
 app.on('second-instance', showWin);
 app.on('before-quit', () => { quitting = true; });
