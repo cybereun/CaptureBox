@@ -5,6 +5,9 @@ const MODE_LABEL = { region: '영역', window: '창', fullscreen: '전체 화면
 let assets = [];
 let selectedId = null;
 let toastTimer;
+let selecting = false;
+const checked = new Set();
+let lastChecked = null;
 
 function toast(msg) {
   const t = $('toast');
@@ -21,6 +24,8 @@ async function refresh(select) {
   assets = await snap.listAssets();
   if (select) selectedId = select;
   if (!current()) selectedId = assets[0] ? assets[0].id : null;
+  for (const id of [...checked]) if (!assets.some((a) => a.id === id)) checked.delete(id);
+  updateSelBar();
   renderList();
   renderViewer();
 }
@@ -38,8 +43,16 @@ function renderList() {
   }
   for (const a of assets) {
     const el = document.createElement('div');
-    el.className = 'item' + (a.id === selectedId ? ' sel' : '');
-    el.draggable = true;
+    el.className = 'item' + (a.id === selectedId ? ' sel' : '') + (checked.has(a.id) ? ' chk' : '');
+    el.draggable = !selecting;
+    if (selecting) {
+      const ck = document.createElement('input');
+      ck.type = 'checkbox';
+      ck.className = 'ck';
+      ck.checked = checked.has(a.id);
+      ck.tabIndex = -1;
+      el.append(ck);
+    }
     const img = document.createElement('img');
     img.src = a.thumbUrl;
     img.alt = '';
@@ -54,12 +67,62 @@ function renderList() {
     m.textContent = `${a.width}×${a.height} · ${MODE_LABEL[a.mode] || ''} · ${fmtDate(a.createdAt)}`;
     t.append(n, m);
     el.append(img, t);
-    el.addEventListener('click', () => { selectedId = a.id; renderList(); renderViewer(); });
-    el.addEventListener('dblclick', async () => { await snap.copy(a.id); toast('클립보드에 복사했습니다'); });
+    el.addEventListener('click', (e) => {
+      if (selecting) { toggleCheck(a.id, e.shiftKey); return; }
+      selectedId = a.id; renderList(); renderViewer();
+    });
+    el.addEventListener('dblclick', async () => {
+      if (selecting) return; await snap.copy(a.id); toast('클립보드에 복사했습니다'); });
     el.addEventListener('dragstart', (e) => { e.preventDefault(); snap.drag(a.id); });
     list.append(el);
   }
 }
+
+/* 여러 개 선택 / 삭제 */
+function updateSelBar() {
+  $('selBar').hidden = !selecting;
+  $('selMode').hidden = selecting;
+  $('selCount').textContent = `${checked.size}개 선택`;
+  $('selDel').disabled = !checked.size;
+  $('selAll').checked = assets.length > 0 && checked.size === assets.length;
+}
+function setSelecting(on) {
+  selecting = on;
+  checked.clear();
+  lastChecked = null;
+  updateSelBar();
+  renderList();
+}
+function toggleCheck(id, range) {
+  if (range && lastChecked && lastChecked !== id) {
+    const a = assets.findIndex((x) => x.id === lastChecked), b = assets.findIndex((x) => x.id === id);
+    if (a >= 0 && b >= 0) for (let i = Math.min(a, b); i <= Math.max(a, b); i++) checked.add(assets[i].id);
+  } else if (checked.has(id)) checked.delete(id);
+  else checked.add(id);
+  lastChecked = id;
+  updateSelBar();
+  renderList();
+}
+$('selMode').addEventListener('click', () => setSelecting(true));
+$('selCancel').addEventListener('click', () => setSelecting(false));
+$('selAll').addEventListener('change', (e) => {
+  checked.clear();
+  if (e.target.checked) for (const a of assets) checked.add(a.id);
+  updateSelBar();
+  renderList();
+});
+$('selDel').addEventListener('click', async () => {
+  const n = checked.size;
+  if (!n) return;
+  const all = n === assets.length;
+  if (!confirm(all ? `에셋 ${n}개를 모두 삭제할까요?
+삭제하면 되돌릴 수 없습니다.` : `선택한 에셋 ${n}개를 삭제할까요?
+삭제하면 되돌릴 수 없습니다.`)) return;
+  const removed = await snap.removeMany([...checked]);
+  setSelecting(false);
+  await refresh();
+  toast(`${removed}개를 삭제했습니다`);
+});
 
 function renderViewer() {
   const a = current();
@@ -166,6 +229,7 @@ $('name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.b
 window.addEventListener('keydown', async (e) => {
   if (!$('editor').hidden || !$('ocrBox').hidden) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (selecting) { if (e.key === 'Escape') setSelecting(false); else if (e.key === 'Delete' && checked.size) $('selDel').click(); return; }
   if (e.key === 'Delete') deleteCurrent();
   else if (e.key === 'Escape') $('picker').hidden = true;
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedId) {

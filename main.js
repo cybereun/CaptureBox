@@ -403,6 +403,15 @@ ipcMain.handle('asset:delete', (_e, id) => {
   for (const f of [imgPath(id), thumbPath(id)]) fs.rm(f, { force: true }, () => {});
   saveIndex();
 });
+ipcMain.handle('assets:deleteMany', (_e, ids) => {
+  const set = new Set(Array.isArray(ids) ? ids : []);
+  const gone = assets.filter((a) => set.has(a.id));
+  if (!gone.length) return 0;
+  assets = assets.filter((a) => !set.has(a.id));
+  for (const a of gone) for (const f of [imgPath(a.id), thumbPath(a.id)]) fs.rm(f, { force: true }, () => {});
+  saveIndex();
+  return gone.length;
+});
 ipcMain.handle('asset:copy', async (_e, id) => {
   if (!findAsset(id)) return;
   await copyImage(nativeImage.createFromPath(imgPath(id)));

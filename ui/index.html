@@ -306,7 +306,13 @@
   </section>
 
   <aside id="panel">
-    <div class="phead"><b>에셋</b><span id="count">0</span></div>
+    <div class="phead"><b>에셋</b><span id="count">0</span><button id="selMode" class="mini" type="button">선택</button></div>
+    <div id="selBar" class="selbar" hidden>
+      <label class="selall"><input type="checkbox" id="selAll"><span>전체</span></label>
+      <span id="selCount">0개 선택</span>
+      <button id="selDel" class="mini danger" type="button" disabled>삭제</button>
+      <button id="selCancel" class="mini" type="button">취소</button>
+    </div>
     <div id="list"></div>
     <div class="pfoot">클릭: 미리보기 · 더블클릭: 복사 · 끌어서 다른 앱에 놓기</div>
   </aside>

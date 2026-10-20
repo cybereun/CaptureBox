@@ -320,6 +320,40 @@ exports.run = async (ctx) => {
         return `기대 ${want.width}x${want.height}, 가로지르는 동안 최대 편차 ${worst}px`;
       });
     }
+    await step('에셋 선택 삭제 (여러 개)', async () => {
+      const w = new BrowserWindow({ show: false });
+      await w.loadURL('data:text/html,<body></body>');
+      const url = await w.webContents.executeJavaScript("(function(){const c=document.createElement('canvas');c.width=40;c.height=30;const x=c.getContext('2d');x.fillStyle='#4c8dff';x.fillRect(0,0,40,30);return c.toDataURL('image/png')})()");
+      w.destroy();
+      const ids = [0, 1, 2, 3].map(() => ctx.addAsset(nativeImage.createFromDataURL(url), 'edit').id);   // 맨 위에 쌓인다 (사용자 에셋은 건드리지 않음)
+      const before = ctx.assets.length;
+      const n1 = await H('assets:deleteMany', [ids[0], 'nope']);
+      if (n1 !== 1 || ctx.assets.length !== before - 1) throw new Error(`선택 삭제 결과가 이상합니다 (${n1}개, 남은 ${ctx.assets.length}/${before})`);
+      if (!ctx.assets.some((a) => a.id === ids[1])) throw new Error('선택하지 않은 에셋이 지워졌습니다');
+      // 화면(UI) 경로: 선택 모드 → 위 두 개 체크 → 삭제 (confirm 은 자동 승인). 전체 선택은 사용자 에셋 보호를 위해 삭제까지는 하지 않는다
+      const js = (code) => ctx.win.webContents.executeJavaScript(code);
+      await js('window.confirm = () => true; refresh()');
+      const ui = await js(`(async () => {
+        const $ = (id) => document.getElementById(id);
+        $('selMode').click();
+        const items = document.querySelectorAll('#list .item');
+        const hasCk = document.querySelectorAll('#list .item .ck').length === items.length;
+        $('selAll').click();
+        const all = $('selCount').textContent === items.length + '개 선택';
+        $('selAll').click();
+        const none = $('selCount').textContent === '0개 선택' && $('selDel').disabled;
+        document.querySelectorAll('#list .item')[0].click();
+        document.querySelectorAll('#list .item')[1].click();
+        const two = $('selCount').textContent === '2개 선택' && !$('selDel').disabled;
+        $('selDel').click();
+        await new Promise((r) => setTimeout(r, 800));
+        return { n: items.length, hasCk, all, none, two, left: document.querySelectorAll('#list .item').length, bar: $('selBar').hidden };
+      })()`);
+      if (!ui.hasCk || !ui.all || !ui.none || !ui.two) throw new Error(`선택 UI가 이상합니다: ${JSON.stringify(ui)}`);
+      if (ui.left !== ui.n - 2 || ctx.assets.length !== before - 3 || !ui.bar) throw new Error(`UI 삭제 결과가 이상합니다: ${JSON.stringify(ui)} / 남은 ${ctx.assets.length}`);
+      await H('assets:deleteMany', [ids[3]]);   // 시험용 마지막 하나 정리
+      return `선택 삭제 OK, 화면에서 체크 2개 삭제 OK (전체 선택 ${ui.n}개 토글 확인)`;
+    });
     await step('화면 고정(핀): 생성·크기 조절·닫기', async () => {
       const w = new BrowserWindow({ show: false });
       await w.loadURL('data:text/html,<body></body>');

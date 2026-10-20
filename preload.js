@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('snap', {
   captureWindow: (id) => ipcRenderer.invoke('capture:window', id),
   rename: (id, name) => ipcRenderer.invoke('asset:rename', id, name),
   remove: (id) => ipcRenderer.invoke('asset:delete', id),
+  removeMany: (ids) => ipcRenderer.invoke('assets:deleteMany', ids),
   copy: (id) => ipcRenderer.invoke('asset:copy', id),
   save: (id) => ipcRenderer.invoke('asset:save', id),
   getImageData: (id) => ipcRenderer.invoke('asset:dataUrl', id),
