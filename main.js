@@ -411,12 +411,22 @@ ipcMain.handle('asset:save', async (_e, id) => {
   const a = findAsset(id);
   if (!a) return false;
   const r = await dialog.showSaveDialog(win, {
-    defaultPath: a.name.replace(/[\\/:*?"<>|]/g, '-') + '.png',
-    filters: [{ name: 'PNG', extensions: ['png'] }, { name: 'JPEG', extensions: ['jpg'] }],
+    // 이름 속 점(시각 22.11.12 등)은 윈도우가 확장자로 착각해 .png/.jpg 가 붙지 않을 수 있으므로 쓰지 않는다.
+    defaultPath: a.name.replace(/[\\/:*?"<>|.]/g, '-') + '.png',
+    filters: [{ name: 'PNG', extensions: ['png'] }, { name: 'JPEG', extensions: ['jpg', 'jpeg'] }],
   });
   if (r.canceled || !r.filePath) return false;
-  const img = nativeImage.createFromPath(imgPath(id));
-  fs.writeFileSync(r.filePath, /\.jpe?g$/i.test(r.filePath) ? img.toJPEG(92) : img.toPNG());
+  // 확장자가 png/jpg 가 아니면 열 수 없는 파일이 되므로 .png 를 붙인다.
+  let out = r.filePath;
+  if (!/\.(png|jpe?g)$/i.test(out)) out += '.png';
+  const src = fs.readFileSync(imgPath(id));
+  if (/\.jpe?g$/i.test(out)) {
+    const img = nativeImage.createFromBuffer(src);
+    if (img.isEmpty()) throw new Error('이미지를 읽을 수 없습니다');
+    fs.writeFileSync(out, img.toJPEG(92));
+  } else {
+    fs.writeFileSync(out, src);   // 보관본이 이미 PNG 이므로 다시 인코딩하지 않고 그대로 저장
+  }
   return true;
 });
 ipcMain.handle('asset:dataUrl', (_e, id) => {
