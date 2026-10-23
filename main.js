@@ -335,16 +335,18 @@ async function prepare(delay) {
   await sleep(300);
 }
 
-/* 클립보드 전용: 에셋에 저장하지 않고 대시보드도 열지 않은 채 복사만 하고, 작은 배지로 알린다. */
-async function finishClipOnly(img) {
+/* 클립보드 전용: 에셋에는 저장하되 대시보드는 열지 않은 채 복사하고, 작은 배지로 알린다. */
+async function finishClipOnly(img, mode) {
+  const a = addAsset(img, mode);
   await copyImage(img);
+  win.webContents.send('assets:changed', { select: a.id });
   const badge = createBadge(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
   badge.set('클립보드에 복사됨');
   setTimeout(() => badge.close(), 1300);
 }
 
 async function finish(img, mode) {
-  if (settings.clipOnly) return finishClipOnly(img);
+  if (settings.clipOnly) return finishClipOnly(img, mode);
   const a = addAsset(img, mode);
   if (settings.autoCopy) await copyImage(img);
   win.show();
@@ -398,13 +400,10 @@ ipcMain.handle('capture:window', async (_e, id) => {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 3840, height: 2160 } });
   const s = srcs.find((x) => x.id === id);
   if (!s || s.thumbnail.isEmpty()) return { ok: false, message: '창을 캡처할 수 없습니다 (최소화된 창일 수 있어요)' };
-  if (settings.clipOnly) {
-    await copyImage(s.thumbnail);
-    return { ok: true, toast: '창 캡처 완료 · 클립보드에만 복사됨' };
-  }
   const a = addAsset(s.thumbnail, 'window');
-  if (settings.autoCopy) await copyImage(s.thumbnail);
-  return { ok: true, select: a.id, toast: settings.autoCopy ? '창 캡처 완료 · 클립보드에 복사됨' : '창 캡처 완료' };
+  const copied = settings.autoCopy || settings.clipOnly;
+  if (copied) await copyImage(s.thumbnail);
+  return { ok: true, select: a.id, toast: copied ? '창 캡처 완료 · 클립보드에 복사됨' : '창 캡처 완료' };
 });
 
 ipcMain.handle('asset:rename', (_e, id, name) => {
