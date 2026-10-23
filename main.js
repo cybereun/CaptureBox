@@ -20,7 +20,7 @@ let busy = false;
 /* ---------- 저장소 (에셋 + 설정) ---------- */
 let assetsDir, indexFile, settingsFile;
 let assets = [];
-let settings = { autoCopy: true };
+let settings = { autoCopy: true, clipOnly: false };
 
 let storeError = '';
 const defaultDir = () => path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
@@ -335,7 +335,16 @@ async function prepare(delay) {
   await sleep(300);
 }
 
+/* 클립보드 전용: 에셋에 저장하지 않고 대시보드도 열지 않은 채 복사만 하고, 작은 배지로 알린다. */
+async function finishClipOnly(img) {
+  await copyImage(img);
+  const badge = createBadge(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
+  badge.set('클립보드에 복사됨');
+  setTimeout(() => badge.close(), 1300);
+}
+
 async function finish(img, mode) {
+  if (settings.clipOnly) return finishClipOnly(img);
   const a = addAsset(img, mode);
   if (settings.autoCopy) await copyImage(img);
   win.show();
@@ -347,6 +356,7 @@ async function runCapture(mode, delay = 0) {
   if (busy) return;
   busy = true;
   let done = false;
+  const wasVisible = win.isVisible();
   try {
     await prepare(delay);
     if (mode === 'fullscreen') {
@@ -366,7 +376,8 @@ async function runCapture(mode, delay = 0) {
     win.webContents.send('assets:changed', { toast: `캡처 실패: ${err.message}` });
   } finally {
     busy = false;
-    if (!done && !win.isDestroyed()) { win.show(); win.focus(); }
+    // 클립보드 전용이면 취소해도 대시보드를 새로 띄우지 않는다(원래 열려 있었던 경우만 복원).
+    if (!done && !win.isDestroyed() && (!settings.clipOnly || wasVisible)) { win.show(); win.focus(); }
   }
 }
 
@@ -387,6 +398,10 @@ ipcMain.handle('capture:window', async (_e, id) => {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 3840, height: 2160 } });
   const s = srcs.find((x) => x.id === id);
   if (!s || s.thumbnail.isEmpty()) return { ok: false, message: '창을 캡처할 수 없습니다 (최소화된 창일 수 있어요)' };
+  if (settings.clipOnly) {
+    await copyImage(s.thumbnail);
+    return { ok: true, toast: '창 캡처 완료 · 클립보드에만 복사됨' };
+  }
   const a = addAsset(s.thumbnail, 'window');
   if (settings.autoCopy) await copyImage(s.thumbnail);
   return { ok: true, select: a.id, toast: settings.autoCopy ? '창 캡처 완료 · 클립보드에 복사됨' : '창 캡처 완료' };

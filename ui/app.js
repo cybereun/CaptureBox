@@ -240,6 +240,10 @@ window.addEventListener('keydown', async (e) => {
 
 /* 설정 / 이벤트 */
 $('autoCopy').addEventListener('change', (e) => snap.setSettings({ autoCopy: e.target.checked }));
+$('clipOnly').addEventListener('change', (e) => {
+  snap.setSettings({ clipOnly: e.target.checked });
+  $('autoCopy').disabled = e.target.checked;
+});
 snap.onChanged(async (p) => {
   if (p.select) await refresh(p.select);
   if (p.toast) toast(p.toast);
@@ -248,5 +252,7 @@ snap.onChanged(async (p) => {
 (async () => {
   const s = await snap.getSettings();
   $('autoCopy').checked = !!s.autoCopy;
+  $('clipOnly').checked = !!s.clipOnly;
+  $('autoCopy').disabled = !!s.clipOnly;
   await refresh();
 })();
