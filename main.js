@@ -464,6 +464,21 @@ ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
   if (base) { a.name = `${base.name} (편집)`; saveIndex(); }
   return a.id;
 });
+ipcMain.handle('asset:print', async (_e, id) => {
+  if (!findAsset(id)) return { ok: false };
+  const os = require('os');
+  const { pathToFileURL } = require('url');
+  const html = path.join(os.tmpdir(), 'capturebox-print.html');
+  fs.writeFileSync(html, '<!doctype html><meta charset="utf-8"><style>@page{margin:10mm}html,body{margin:0;height:100%}' +
+    'body{display:flex;align-items:flex-start;justify-content:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>' +
+    '<img src="' + pathToFileURL(imgPath(id)).href + '">');
+  const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  try {
+    await w.loadURL(pathToFileURL(html).href);
+    return await new Promise((res) => w.webContents.print({ silent: false, printBackground: true }, (ok, err) =>
+      res(ok ? { ok: true } : { ok: false, error: err && err !== 'cancelled' ? err : '' })));
+  } finally { w.destroy(); }
+});
 ipcMain.handle('asset:reveal', (_e, id) => { if (findAsset(id)) shell.showItemInFolder(imgPath(id)); });
 ipcMain.on('asset:drag', (e, id) => {
   if (!findAsset(id)) return;

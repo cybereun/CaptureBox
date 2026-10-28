@@ -209,6 +209,13 @@ $('canvas').addEventListener('wheel', (e) => {
 $('copy').addEventListener('click', async () => { if (selectedId) { await snap.copy(selectedId); toast('클립보드에 복사했습니다'); } });
 $('save').addEventListener('click', async () => { if (selectedId && (await snap.save(selectedId))) toast('저장했습니다'); });
 $('reveal').addEventListener('click', () => selectedId && snap.reveal(selectedId));
+$('print').addEventListener('click', printCurrent);
+async function printCurrent() {
+  if (!selectedId) return;
+  const r = await snap.print(selectedId);
+  if (r && r.ok) toast('인쇄를 보냈습니다');
+  else if (r && r.error) toast('인쇄 실패: ' + r.error);
+}
 $('del').addEventListener('click', deleteCurrent);
 async function deleteCurrent() {
   if (!selectedId) return;
@@ -231,6 +238,7 @@ window.addEventListener('keydown', async (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (selecting) { if (e.key === 'Escape') setSelecting(false); else if (e.key === 'Delete' && checked.size) $('selDel').click(); return; }
   if (e.key === 'Delete') deleteCurrent();
+  if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); printCurrent(); }
   else if (e.key === 'Escape') $('picker').hidden = true;
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedId) {
     await snap.copy(selectedId);

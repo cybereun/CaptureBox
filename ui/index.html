@@ -134,6 +134,19 @@
     <path d="M7 24c0-4 2-6 6-6h22c4 0 6 2 6 6-6 3-34 3-34 0z" fill="url(#gGloss)" opacity=".7"/>
   </symbol>
 
+  <symbol id="i-print" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="15" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="13" y="3" width="22" height="14" rx="2.5" fill="#fff" stroke="#c9d3e6" stroke-width="1.2"/>
+    <rect x="17" y="7" width="14" height="2.2" rx="1.1" fill="#9db8f0"/><rect x="17" y="11" width="10" height="2.2" rx="1.1" fill="#c9d8f5"/>
+    <rect x="4" y="18" width="40" height="20" rx="6" fill="url(#gSlateD)"/>
+    <rect x="4" y="14" width="40" height="20" rx="6" fill="url(#gSlate)"/>
+    <path d="M8 19c0-3 2-4 6-4h20c4 0 6 1 6 4 0 1.5-7 2-16 2s-16-.5-16-2z" fill="url(#gGloss)" opacity=".7"/>
+    <circle cx="37" cy="21" r="2" fill="#16a05a"/>
+    <rect x="11" y="27" width="26" height="3" rx="1.5" fill="#3a4764"/>
+    <rect x="13" y="28.5" width="22" height="13" rx="2" fill="#fff" stroke="#c9d3e6" stroke-width="1.2"/>
+    <rect x="17" y="32" width="14" height="2.2" rx="1.1" fill="#9db8f0"/><rect x="17" y="36" width="9" height="2.2" rx="1.1" fill="#c9d8f5"/>
+  </symbol>
+
   <symbol id="i-trash" viewBox="0 0 48 48">
     <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
     <path d="M10 16h28l-2.4 25c-.2 2-1.6 3.4-3.6 3.4H16c-2 0-3.4-1.4-3.6-3.4z" fill="url(#gRedD)"/>
@@ -299,6 +312,7 @@
           <button id="copy" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-copy"/></svg><span>복사</span></button>
           <button id="save" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-save"/></svg><span>저장…</span></button>
           <button id="reveal" class="ib"><svg class="ico-s" aria-hidden="true"><use href="#i-folder"/></svg><span>폴더</span></button>
+          <button id="print" class="ib" title="프린터로 인쇄 (Ctrl+P)"><svg class="ico-s" aria-hidden="true"><use href="#i-print"/></svg><span>인쇄</span></button>
           <button id="del" class="ib danger"><svg class="ico-s" aria-hidden="true"><use href="#i-trash"/></svg><span>삭제</span></button>
         </div>
       </div>
@@ -396,7 +410,7 @@
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>전체 화면</span><i>▾</i></button><div class="acc-b" hidden>기본 단축키 <kbd>Ctrl+Alt+2</kbd>. 마우스가 있는 모니터 전체를 캡처합니다.</div></div>
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>스크롤 캡처</span><i>▾</i></button><div class="acc-b" hidden>기본 단축키 <kbd>Ctrl+Alt+3</kbd>. 스크롤되는 부분만 드래그하면 자동으로 내려가며 한 장으로 이어 붙입니다. 고정 헤더·사이드바는 빼고 선택하면 결과가 깔끔합니다.</div></div>
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>지연 · 자동 복사</span><i>▾</i></button><div class="acc-b" hidden>지연을 3/5/10초로 두면 그 시간 뒤에 캡처합니다. ‘캡처 후 자동 복사’를 켜면 캡처 직후 클립보드에 복사됩니다.</div></div>
-<div class="acc"><button class="acc-h" aria-expanded="false"><span>에셋 목록</span><i>▾</i></button><div class="acc-b" hidden>클릭=미리보기, 더블클릭=복사, 끌어서 카톡·문서·폴더에 바로 놓기, Delete=삭제, Ctrl+C=복사. 이름은 미리보기 위쪽에서 바꿀 수 있습니다.</div></div>
+<div class="acc"><button class="acc-h" aria-expanded="false"><span>에셋 목록</span><i>▾</i></button><div class="acc-b" hidden>클릭=미리보기, 더블클릭=복사, 끌어서 카톡·문서·폴더에 바로 놓기, Delete=삭제, Ctrl+C=복사, Ctrl+P=인쇄. 이름은 미리보기 위쪽에서 바꿀 수 있습니다.</div></div>
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>확대 · 축소</span><i>▾</i></button><div class="acc-b" hidden>미리보기 위에서 Ctrl+마우스 휠로 확대·축소합니다. 이미지를 클릭하거나 맞춤/100% 버튼을 누르면 되돌아갑니다.</div></div>
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>트레이 상주</span><i>▾</i></button><div class="acc-b" hidden>창을 닫아도 앱은 종료되지 않고 작업표시줄 오른쪽 <b>트레이</b>에 남아 있습니다. 그래서 창을 닫은 뒤에도 단축키로 바로 캡처할 수 있습니다. 설정 > 일반에서 <b>윈도우 시작 시 자동 실행</b>을 켜면 컴퓨터를 켤 때 트레이로 시작합니다. 트레이 아이콘을 누르면 창이 열리고, 우클릭 메뉴에서 캡처나 <b>종료</b>를 고를 수 있습니다. 완전히 끄려면 <b>종료</b>를 누르세요.</div></div>
 <div class="acc"><button class="acc-h" aria-expanded="false"><span>글자 인식 (OCR)</span><i>▾</i></button><div class="acc-b" hidden>에셋을 선택하고 <b>글자 인식</b>을 누르면 이미지 안의 글자를 읽어서 <b>클립보드에 복사</b>하고 결과 창에 보여 줍니다. Windows에 내장된 OCR을 쓰므로 별도 설치가 필요 없고, 한국어와 영어를 함께 읽습니다. 글자가 작거나 흐리면 정확도가 떨어질 수 있습니다.</div></div>
