@@ -464,6 +464,25 @@ ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
   if (base) { a.name = `${base.name} (편집)`; saveIndex(); }
   return a.id;
 });
+/* 인쇄: 이미지를 한 장에 맞춰 넣은 숨은 창에서 시스템 인쇄 대화상자를 연다. */
+ipcMain.handle('asset:print', async (_e, id) => {
+  if (!findAsset(id)) return { ok: false, reason: '이미지를 찾을 수 없습니다' };
+  const tmp = path.join(app.getPath('temp'), `capturebox-print-${id}.html`);
+  fs.writeFileSync(tmp, '<!doctype html><meta charset="utf-8"><style>@page{margin:10mm}html,body{margin:0;height:100%}' +
+    'body{display:flex;align-items:center;justify-content:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>' +
+    `<img id="i" src="${pathToFileURL(imgPath(id)).href}">`);
+  const pw = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  try {
+    await pw.loadFile(tmp);
+    await pw.webContents.executeJavaScript('document.getElementById("i").decode()').catch(() => {});
+    return await new Promise((resolve) => {
+      pw.webContents.print({ printBackground: true }, (ok, reason) => resolve({ ok, reason }));
+    });
+  } finally {
+    if (!pw.isDestroyed()) pw.destroy();
+    fs.rm(tmp, { force: true }, () => {});
+  }
+});
 ipcMain.handle('asset:reveal', (_e, id) => { if (findAsset(id)) shell.showItemInFolder(imgPath(id)); });
 ipcMain.on('asset:drag', (e, id) => {
   if (!findAsset(id)) return;
