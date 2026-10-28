@@ -464,20 +464,16 @@ ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
   if (base) { a.name = `${base.name} (편집)`; saveIndex(); }
   return a.id;
 });
-ipcMain.handle('asset:print', async (_e, id) => {
+ipcMain.handle('asset:print', (_e, id) => {
   if (!findAsset(id)) return { ok: false };
-  const os = require('os');
   const { pathToFileURL } = require('url');
-  const html = path.join(os.tmpdir(), 'capturebox-print.html');
-  fs.writeFileSync(html, '<!doctype html><meta charset="utf-8"><style>@page{margin:10mm}html,body{margin:0;height:100%}' +
-    'body{display:flex;align-items:flex-start;justify-content:center}img{max-width:100%;max-height:100vh;object-fit:contain}</style>' +
-    '<img src="' + pathToFileURL(imgPath(id)).href + '">');
-  const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-  try {
-    await w.loadURL(pathToFileURL(html).href);
-    return await new Promise((res) => w.webContents.print({ silent: false, printBackground: true }, (ok, err) =>
-      res(ok ? { ok: true } : { ok: false, error: err && err !== 'cancelled' ? err : '' })));
-  } finally { w.destroy(); }
+  const w = new BrowserWindow({
+    width: 1000, height: 820, minWidth: 600, minHeight: 500, title: '인쇄 미리보기',
+    parent: win || undefined, autoHideMenuBar: true, icon: path.join(__dirname, 'ui', 'icon.png'),
+    webPreferences: { sandbox: true, contextIsolation: true },
+  });
+  w.loadFile(path.join(__dirname, 'ui', 'print.html'), { query: { src: pathToFileURL(imgPath(id)).href } });
+  return { ok: true, preview: true };
 });
 ipcMain.handle('asset:reveal', (_e, id) => { if (findAsset(id)) shell.showItemInFolder(imgPath(id)); });
 ipcMain.on('asset:drag', (e, id) => {

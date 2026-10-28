@@ -213,8 +213,7 @@ $('print').addEventListener('click', printCurrent);
 async function printCurrent() {
   if (!selectedId) return;
   const r = await snap.print(selectedId);
-  if (r && r.ok) toast('인쇄를 보냈습니다');
-  else if (r && r.error) toast('인쇄 실패: ' + r.error);
+  if (!r || !r.ok) toast('인쇄 미리보기를 열지 못했습니다');
 }
 $('del').addEventListener('click', deleteCurrent);
 async function deleteCurrent() {

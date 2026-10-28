@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>인쇄 미리보기</title>
+<style id="pageStyle">@page { size: A4 portrait; margin: 10mm; }</style>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; }
+  body { background: #e6e9ef; display: flex; flex-direction: column; }
+  .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; background: #fff; border-bottom: 1px solid #d5dbe6; }
+  .bar label { font-size: 13px; color: #445; display: flex; align-items: center; gap: 6px; }
+  .bar select { font: inherit; padding: 4px 6px; border: 1px solid #c9d1df; border-radius: 6px; }
+  .bar .sp { flex: 1; }
+  .bar button { font: inherit; font-weight: 600; padding: 6px 16px; border-radius: 8px; border: 1px solid #c9d1df; background: #f3f5f9; cursor: pointer; }
+  .bar button.go { background: #2f6df0; border-color: #2f6df0; color: #fff; }
+  .stage { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .paper { background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.18); display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
+  .paper img { display: block; object-fit: contain; }
+  @media print {
+    body { background: #fff; display: block; }
+    .bar { display: none; }
+    .stage { padding: 0; overflow: visible; display: block; }
+    .paper { box-shadow: none; width: auto !important; height: auto !important; padding: 0 !important; display: flex; justify-content: center; }
+    .paper img { max-width: 100%; max-height: 100vh; }
+    .paper.actual img { max-width: none; max-height: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <label>용지 방향
+      <select id="ori"><option value="portrait">세로</option><option value="landscape">가로</option></select>
+    </label>
+    <label>크기
+      <select id="fit"><option value="fit">용지에 맞춤</option><option value="actual">원본 크기</option></select>
+    </label>
+    <label>여백
+      <select id="mar"><option value="10">보통 (10mm)</option><option value="5">좁게 (5mm)</option><option value="0">없음</option><option value="20">넓게 (20mm)</option></select>
+    </label>
+    <span class="sp"></span>
+    <button id="close" type="button">닫기</button>
+    <button id="go" class="go" type="button">인쇄…</button>
+  </div>
+  <div class="stage" id="stage"><div class="paper" id="paper"><img id="img" alt=""></div></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const img = $('img');
+  img.src = new URLSearchParams(location.search).get('src') || '';
+  const MM = 96 / 25.4; // CSS px per mm
+
+  function layout() {
+    const land = $('ori').value === 'landscape';
+    const mar = Number($('mar').value);
+    const actual = $('fit').value === 'actual';
+    $('pageStyle').textContent = `@page { size: A4 ${land ? 'landscape' : 'portrait'}; margin: ${mar}mm; }`;
+    const pw = (land ? 297 : 210) * MM, ph = (land ? 210 : 297) * MM;
+    // 화면 안에 들어오도록 종이를 축소해서 보여 줌
+    const st = $('stage');
+    const s = Math.min(1, (st.clientWidth - 48) / pw, (st.clientHeight - 48) / ph);
+    const paper = $('paper');
+    paper.classList.toggle('actual', actual);
+    paper.style.width = pw * s + 'px';
+    paper.style.height = ph * s + 'px';
+    paper.style.padding = mar * MM * s + 'px';
+    const aw = (pw - 2 * mar * MM) * s, ah = (ph - 2 * mar * MM) * s;
+    if (actual) {
+      img.style.width = img.naturalWidth * s + 'px';
+      img.style.height = img.naturalHeight * s + 'px';
+      img.style.maxWidth = img.style.maxHeight = 'none';
+    } else {
+      img.style.width = img.style.height = 'auto';
+      img.style.maxWidth = aw + 'px';
+      img.style.maxHeight = ah + 'px';
+    }
+  }
+  // 인쇄할 때는 화면용 크기 지정을 풀어 실제 용지에 맞춤
+  window.addEventListener('beforeprint', () => {
+    const actual = $('fit').value === 'actual';
+    img.style.width = actual ? img.naturalWidth + 'px' : 'auto';
+    img.style.height = actual ? img.naturalHeight + 'px' : 'auto';
+    img.style.maxWidth = img.style.maxHeight = '';
+  });
+  window.addEventListener('afterprint', layout);
+
+  // 가로로 긴 이미지는 가로 방향으로 시작
+  img.addEventListener('load', () => {
+    if (img.naturalWidth > img.naturalHeight) $('ori').value = 'landscape';
+    layout();
+  });
+  for (const id of ['ori', 'fit', 'mar']) $(id).addEventListener('change', layout);
+  window.addEventListener('resize', layout);
+  $('go').addEventListener('click', () => window.print());
+  $('close').addEventListener('click', () => window.close());
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.close();
+    if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); window.print(); }
+  });
+</script>
+</body>
+</html>
