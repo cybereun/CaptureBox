@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인정보처리방침 — CaptureBox</title>
+<meta name="description" content="CaptureBox 개인정보처리방침: 개인정보를 수집하거나 서버로 전송하지 않습니다.">
+<link rel="icon" href="img/icon.png">
+<link rel="canonical" href="https://cybereun.github.io/CaptureBox/privacy.html">
+<link rel="stylesheet" href="style.css">
+<style>
+  .doc { max-width: 820px; padding: 56px 0 72px; }
+  .doc h1 { font-size: clamp(32px, 5vw, 44px); margin: 8px 0 10px; }
+  .doc h2 { font-size: 24px; margin: 40px 0 10px; }
+  .doc p, .doc li { color: var(--muted); font-size: 17px; }
+  .doc li { margin: 6px 0; }
+  .doc strong { color: var(--text); }
+  .doc table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 16px; }
+  .doc th, .doc td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .doc th { color: var(--text); width: 32%; }
+  .doc td { color: var(--muted); }
+  .doc .box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; margin: 18px 0; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="img/icon.png" alt="">CaptureBox</a>
+    <nav class="menu" aria-label="주 메뉴"><a href="./">홈</a><a class="gh" href="https://github.com/cybereun/CaptureBox" target="_blank" rel="noopener">GitHub</a></nav>
+  </div>
+</header>
+
+<main class="wrap doc">
+  <div class="eyebrow">개인정보처리방침</div>
+  <h1>CaptureBox 개인정보처리방침</h1>
+  <p>시행일: 2026년 11월 8일 · 개발자: Lebi_Cybereun (GitHub: cybereun)</p>
+
+  <div class="box"><strong>한 줄 요약</strong><br>CaptureBox는 개인정보를 수집하지 않고, 캡처 이미지를 서버로 보내지 않습니다. 모든 처리는 내 PC 안에서 이루어집니다.</div>
+
+  <h2>1. 수집하는 정보</h2>
+  <p>없습니다. 계정 가입, 로그인, 광고, 사용 통계(분석), 오류 보고 전송이 모두 없습니다.</p>
+
+  <h2>2. 이미지와 글자 처리</h2>
+  <ul>
+    <li>캡처, 편집, 모자이크·블러, 글자 인식(OCR), 인쇄는 모두 <strong>내 PC 안에서만</strong> 처리됩니다.</li>
+    <li>글자 인식 모델은 앱에 내장되어 있어 인터넷 연결이 필요 없습니다.</li>
+    <li>캡처한 이미지는 사용자가 정한 폴더(기본: 사진\Screenshots)와 앱의 설정 폴더에 저장됩니다. 사용자가 직접 삭제할 수 있습니다.</li>
+    <li>이미지를 클립보드에 복사하는 기능은 사용자가 캡처하거나 복사를 눌렀을 때만 동작합니다.</li>
+  </ul>
+
+  <h2>3. 네트워크 사용</h2>
+  <table>
+    <tr><th>Microsoft Store 버전</th><td>앱이 직접 인터넷에 접속하지 않습니다. 업데이트는 Microsoft Store가 처리합니다.</td></tr>
+    <tr><th>GitHub 설치 버전</th><td>새 버전이 있는지 확인하기 위해 GitHub(github.com/cybereun/CaptureBox)의 공개 릴리즈 정보에 접속합니다. 이때 일반적인 접속 정보(IP 주소 등)가 GitHub에 전달될 수 있으며, 캡처 이미지나 사용자 정보는 전송되지 않습니다.</td></tr>
+  </table>
+
+  <h2>4. 앱이 사용하는 권한과 목적</h2>
+  <ul>
+    <li><strong>화면 캡처</strong>: 사용자가 캡처 단축키나 버튼을 눌렀을 때만 화면을 읽습니다.</li>
+    <li><strong>전역 단축키</strong>: 앱이 창 없이 트레이에 있어도 단축키로 캡처할 수 있도록 합니다.</li>
+    <li><strong>마우스 입력(휠)</strong>: 스크롤 캡처를 하는 동안에만 선택한 영역에서 마우스 휠을 자동으로 돌립니다.</li>
+    <li><strong>PowerShell 실행</strong>: 스크롤 캡처의 입력 도우미와 Windows 내장 OCR(대체 수단)에 쓰이며, 앱에 포함된 스크립트만 실행합니다.</li>
+    <li><strong>파일 쓰기</strong>: 캡처 이미지와 설정을 사용자가 정한 폴더에 저장합니다.</li>
+  </ul>
+
+  <h2>5. 제3자 제공</h2>
+  <p>수집하는 정보가 없으므로 제3자에게 제공하는 정보도 없습니다.</p>
+
+  <h2>6. 오픈소스 구성요소</h2>
+  <p>글자 인식에는 PaddleOCR PP-OCRv5 모델(Apache-2.0)과 ONNX Runtime(MIT)을 사용합니다. 자세한 내용은 <a href="https://github.com/cybereun/CaptureBox/blob/main/THIRD_PARTY.md" target="_blank" rel="noopener">오픈소스 고지</a>에 있습니다.</p>
+
+  <h2>7. 변경과 문의</h2>
+  <p>이 방침이 바뀌면 이 페이지에 시행일과 함께 게시합니다. 문의는 <a href="https://github.com/cybereun/CaptureBox/issues" target="_blank" rel="noopener">GitHub Issues</a>로 남겨 주세요.</p>
+
+  <hr style="border:0;border-top:1px solid var(--line);margin:40px 0 24px">
+  <h2 style="margin-top:0">Privacy Policy (English summary)</h2>
+  <p>CaptureBox does not collect personal data and does not upload your screenshots. Capture, editing, OCR and printing all run locally on your PC, and the OCR model is bundled with the app. The Microsoft Store version makes no network connections by itself; the GitHub-installed version contacts GitHub only to check for new releases. Contact: <a href="https://github.com/cybereun/CaptureBox/issues" target="_blank" rel="noopener">GitHub Issues</a>.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 <a href="https://github.com/cybereun" target="_blank" rel="noopener">cybereun</a> · MIT License</span>
+    <span><a href="./">홈</a> · <a href="https://github.com/cybereun/CaptureBox" target="_blank" rel="noopener">GitHub</a></span>
+  </div>
+</footer>
+</body>
+</html>

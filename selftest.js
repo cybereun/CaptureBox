@@ -65,6 +65,21 @@ exports.run = async (ctx) => {
     return 'app-update.yml · 스크립트·onnxruntime unpacked · OCR 모델 3개 OK';
   });
 
+  if (process.env.CB_FORCE_STORE === '1') {
+    await step('Store 모드: 자체 업데이트 꺼짐 · 시작 시 자동 실행 꺼짐', async () => {
+      if (!ctx.isStore) throw new Error('Store 모드로 인식되지 않았습니다');
+      const u = await H('update:get');
+      if (u.state !== 'store') throw new Error(`업데이트 상태가 store 가 아닙니다: ${u.state}`);
+      await H('update:check');
+      const u2 = await H('update:get');
+      if (u2.state !== 'store') throw new Error(`업데이트 확인 후 상태가 바뀌었습니다: ${u2.state}`);
+      const l = await H('login:get');
+      if (l.supported || !l.store) throw new Error(`자동 실행이 꺼져 있어야 합니다: ${JSON.stringify(l)}`);
+      const r = await H('login:set', true);
+      if (r.enabled) throw new Error('Store 모드에서 자동 실행이 켜졌습니다');
+      return '업데이트=store, 자동 실행 사용 불가';
+    });
+  }
   await step('트레이 아이콘', () => { if (!ctx.tray || ctx.tray.isDestroyed()) throw new Error('트레이가 만들어지지 않았습니다'); return 'OK'; });
 
   if (hiddenRun) {

@@ -104,6 +104,16 @@ npm run verify   # 설치본 자동 검증 (빌드 후 실제 앱을 실행해 �
 
 설치된 앱은 시작 직후, 이후 3분마다, 창을 다시 켤 때마다 최신 릴리즈를 확인해 자동으로 내려받고, 알림 카드/푸터의 버튼으로 재설치합니다.
 
+## Microsoft Store (MSIX) 빌드
+
+```bash
+npm run msix      # store/identity.json 의 값으로 dist-store/CaptureBox-Store-<버전>.appx 를 만듭니다
+```
+
+- Partner Center 에 올릴 패키지입니다(서명하지 않음 — Store 가 서명). 제출 문구·인증 메모는 [store/listing-ko.md](store/listing-ko.md).
+- Store 버전은 자체 업데이트와 '윈도우 시작 시 자동 실행'이 꺼져 있습니다 (업데이트는 Store 가 담당, MSIX 에서는 Run 키 방식 자동 실행이 동작하지 않음).
+- 개인정보처리방침: https://cybereun.github.io/CaptureBox/privacy.html
+
 ## 오픈소스 고지
 
 정밀 글자 인식은 PaddleOCR PP-OCRv5(Apache-2.0) 모델과 ONNX Runtime(MIT)을 쓰고, 추론 방식은 [kordoc](https://github.com/chrisryugj/kordoc)(MIT)을 참고했습니다. 자세한 내용은 [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -11,7 +11,9 @@
     "release": "electron-builder --win --publish always",
     "verify": "node scripts/verify.js",
     "models": "node scripts/fetch-models.js",
-    "predist": "node scripts/fetch-models.js"
+    "predist": "node scripts/fetch-models.js",
+    "store-assets": "node scripts/make-store-assets.js",
+    "msix": "node scripts/build-msix.js"
   },
   "license": "MIT",
   "dependencies": {

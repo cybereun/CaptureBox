@@ -499,13 +499,18 @@ function friendlyError(e) {
 let lastCheck = 0;
 let startupRetries = 4;
 function checkUpdate() {
+  if (isStore) return sendUpdate({ state: 'store' });
   if (!app.isPackaged || !updater) return sendUpdate({ state: 'dev' });
   if (['checking', 'downloading', 'ready'].includes(upd.state)) return;
   lastCheck = Date.now();
   sendUpdate({ state: 'checking', message: '' });
   updater.checkForUpdates().catch(() => { /* 'error' 이벤트에서 처리 */ });
 }
+// Microsoft Store(MSIX) 버전: 업데이트는 Store 가 맡는다 (자체 업데이트는 Store 정책상 쓰지 않는다).
+// CB_FORCE_STORE=1 은 자체 검증에서 Store 동작을 흉내 내기 위한 값이다.
+const isStore = !!process.windowsStore || process.env.CB_FORCE_STORE === '1';
 function initUpdater() {
+  if (isStore) { upd.state = 'store'; return; }
   if (!app.isPackaged || !updater) { upd.state = 'dev'; return; }
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = true;
@@ -790,12 +795,15 @@ ipcMain.handle('hotkeys:reset', () => {
 
 /* ---------- 윈도우 시작 시 자동 실행 (설치본에서만) ---------- */
 const LOGIN_ARGS = ['--hidden'];
+// MSIX(Store) 패키지에서는 레지스트리 쓰기가 가상화되어 Run 키 방식의 자동 실행이 동작하지 않으므로 Store 버전에서는 쓰지 않는다.
 const loginState = () => ({
-  supported: app.isPackaged,
-  enabled: app.isPackaged ? app.getLoginItemSettings({ args: LOGIN_ARGS }).openAtLogin : false,
+  supported: app.isPackaged && !isStore,
+  store: isStore,
+  enabled: app.isPackaged && !isStore ? app.getLoginItemSettings({ args: LOGIN_ARGS }).openAtLogin : false,
 });
 ipcMain.handle('login:get', () => loginState());
 ipcMain.handle('login:set', (_e, on) => {
+  if (isStore) return { ...loginState(), message: 'Microsoft Store 버전에서는 지원하지 않습니다' };
   if (!app.isPackaged) return { ...loginState(), message: '설치본에서만 사용할 수 있습니다' };
   app.setLoginItemSettings({ openAtLogin: !!on, args: LOGIN_ARGS });
   return loginState();
@@ -868,7 +876,7 @@ app.whenReady().then(() => {
     setTimeout(() => require('./selftest').run({
       app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path,
       get win() { return win; }, get tray() { return tray; }, get assets() { return assets; },
-      pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, getPrecise, ocrModelDir, resetPrecise: () => { preciseEngine = null; }, createPin, runCapture, addAsset, startHidden, unpackedPath,
+      isStore, pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, getPrecise, ocrModelDir, resetPrecise: () => { preciseEngine = null; }, createPin, runCapture, addAsset, startHidden, unpackedPath,
     }), 2000);
   }
 });

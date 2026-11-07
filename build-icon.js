@@ -43,19 +43,32 @@ function render(size) {
 
 const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
 const crc = (b) => { let c = ~0; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return ~c >>> 0; };
-function png(size) {
-  const px = render(size), raw = Buffer.alloc((size * 4 + 1) * size);
-  for (let y = 0; y < size; y++) { raw[y * (size * 4 + 1)] = 0; px.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4); }
+// RGBA(W×H) → PNG
+function encode(W, H, px) {
+  const raw = Buffer.alloc((W * 4 + 1) * H);
+  for (let y = 0; y < H; y++) { raw[y * (W * 4 + 1)] = 0; px.copy(raw, y * (W * 4 + 1) + 1, y * W * 4, (y + 1) * W * 4); }
   const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
-  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4); ihdr[8] = 8; ihdr[9] = 6;
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 6;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
+const png = (size) => encode(size, size, render(size));
+// W×H 투명 캔버스 가운데에 아이콘(iconSize 정사각)을 놓은 PNG — Store 타일(가로형 등)용
+function canvasPng(W, H, iconSize) {
+  const icon = render(iconSize), px = Buffer.alloc(W * H * 4);
+  const ox = Math.floor((W - iconSize) / 2), oy = Math.floor((H - iconSize) / 2);
+  for (let y = 0; y < iconSize; y++) icon.copy(px, ((oy + y) * W + ox) * 4, y * iconSize * 4, (y + 1) * iconSize * 4);
+  return encode(W, H, px);
+}
 
-const out = path.join(__dirname, 'assets'); fs.mkdirSync(out, { recursive: true });
-fs.writeFileSync(path.join(out, 'icon.png'), png(512));
-const sizes = [16, 32, 48, 64, 128, 256], imgs = sizes.map(png);
-const head = Buffer.alloc(6); head.writeUInt16LE(1, 2); head.writeUInt16LE(sizes.length, 4);
-let off = 6 + 16 * sizes.length;
-const dir = sizes.map((s, i) => { const e = Buffer.alloc(16); e[0] = s % 256; e[1] = s % 256; e.writeUInt16LE(1, 4); e.writeUInt16LE(32, 6); e.writeUInt32LE(imgs[i].length, 8); e.writeUInt32LE(off, 12); off += imgs[i].length; return e; });
-fs.writeFileSync(path.join(out, 'icon.ico'), Buffer.concat([head, ...dir, ...imgs]));
-console.log('done');
+if (require.main === module) {
+  const out = path.join(__dirname, 'assets'); fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'icon.png'), png(512));
+  const sizes = [16, 32, 48, 64, 128, 256], imgs = sizes.map(png);
+  const head = Buffer.alloc(6); head.writeUInt16LE(1, 2); head.writeUInt16LE(sizes.length, 4);
+  let off = 6 + 16 * sizes.length;
+  const dir = sizes.map((s, i) => { const e = Buffer.alloc(16); e[0] = s % 256; e[1] = s % 256; e.writeUInt16LE(1, 4); e.writeUInt16LE(32, 6); e.writeUInt32LE(imgs[i].length, 8); e.writeUInt32LE(off, 12); off += imgs[i].length; return e; });
+  fs.writeFileSync(path.join(out, 'icon.ico'), Buffer.concat([head, ...dir, ...imgs]));
+  console.log('done');
+}
+
+module.exports = { png, canvasPng, render };

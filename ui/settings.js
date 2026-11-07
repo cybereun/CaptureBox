@@ -11,6 +11,7 @@
       case 'downloading': return `새 버전 ${s.latest || ''} 다운로드 중 ${s.percent || 0}%`;
       case 'ready': return `새 버전 ${s.latest} 준비됨`;
       case 'latest': return '최신 버전입니다';
+      case 'store': return 'Microsoft Store 버전은 Store에서 자동으로 업데이트돼요';
       case 'dev': return '개발 모드 – 자동 업데이트는 설치본에서만 동작합니다';
       case 'error': return `업데이트 확인 실패: ${s.message || ''}`;
       default: return '';
@@ -30,6 +31,7 @@
     $('ftStatus').textContent = ['error', 'checking', 'latest'].includes(u.state) ? label(u) : '';
     $('setUpd').textContent = label(u);
     $('setCheck').disabled = busy;
+    $('setCheck').hidden = u.state === 'store';   // Store 버전은 업데이트 확인 버튼이 필요 없다
     $('setInstall').hidden = !ready;
     const showCard = ready && dismissed !== u.latest;
     $('updCard').hidden = !showCard;
@@ -136,7 +138,7 @@
     const s = await snap.getLogin();
     $('optLogin').checked = !!s.enabled;
     $('optLogin').disabled = !s.supported;
-    $('loginMsg').textContent = s.supported ? '' : '설치본에서만 사용할 수 있습니다 (개발 모드에서는 비활성)';
+    $('loginMsg').textContent = s.supported ? '' : (s.store ? 'Microsoft Store 버전에서는 지원하지 않아요. 직접 설치 버전(GitHub)에서 사용할 수 있어요.' : '설치본에서만 사용할 수 있습니다 (개발 모드에서는 비활성)');
   }
   $('optLogin').addEventListener('change', async () => {
     const s = await snap.setLogin($('optLogin').checked);
