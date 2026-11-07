@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CaptureBox — 캡처하고, 꾸미고, 글자까지 복사하는 Windows 캡처 앱</title>
+<meta name="description" content="영역·창·전체·스크롤 캡처, 화살표·모자이크 편집, 한국어 글자 인식(OCR), 화면 고정까지. 무료 오픈소스 Windows 캡처 앱 CaptureBox.">
+<meta name="theme-color" content="#0b1026">
+<link rel="icon" href="img/icon.png">
+<link rel="canonical" href="https://cybereun.github.io/CaptureBox/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="CaptureBox — 캡처하고, 꾸미고, 글자까지 복사">
+<meta property="og:description" content="무료 오픈소스 Windows 캡처 앱. 스크롤 캡처, 모자이크, 한국어 OCR, 화면 고정까지 한 앱으로.">
+<meta property="og:image" content="https://cybereun.github.io/CaptureBox/img/card-01.png">
+<meta property="og:url" content="https://cybereun.github.io/CaptureBox/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="style.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"CaptureBox","operatingSystem":"Windows 10, Windows 11","applicationCategory":"MultimediaApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW"},"license":"https://opensource.org/licenses/MIT","url":"https://cybereun.github.io/CaptureBox/","downloadUrl":"https://github.com/cybereun/CaptureBox/releases/latest"}
+</script>
+</head>
+<body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec0ff"/><stop offset="1" stop-color="#2f6df0"/></linearGradient>
+    <linearGradient id="gBlueD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a58c9"/><stop offset="1" stop-color="#173a8f"/></linearGradient>
+    <linearGradient id="gOrange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd08a"/><stop offset="1" stop-color="#ff7a1a"/></linearGradient>
+    <linearGradient id="gOrangeD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9620f"/><stop offset="1" stop-color="#9c3f06"/></linearGradient>
+    <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ff0b8"/><stop offset="1" stop-color="#16a05a"/></linearGradient>
+    <linearGradient id="gGreenD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#128a4c"/><stop offset="1" stop-color="#0a5c31"/></linearGradient>
+    <linearGradient id="gPurple" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfb2ff"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+    <linearGradient id="gPurpleD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a2bd0"/><stop offset="1" stop-color="#43168f"/></linearGradient>
+    <linearGradient id="gSlate" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d3dcec"/><stop offset="1" stop-color="#7586a6"/></linearGradient>
+    <linearGradient id="gSlateD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d6d8c"/><stop offset="1" stop-color="#3a4764"/></linearGradient>
+    <linearGradient id="gBezel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56688c"/><stop offset="1" stop-color="#27334d"/></linearGradient>
+    <linearGradient id="gScreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ef0c6"/><stop offset="1" stop-color="#1fb26a"/></linearGradient>
+    <linearGradient id="gGloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+
+    <linearGradient id="gYellow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe98a"/><stop offset="1" stop-color="#f5a800"/></linearGradient>
+    <linearGradient id="gYellowD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d98a00"/><stop offset="1" stop-color="#9a5e00"/></linearGradient>
+    <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8f86"/><stop offset="1" stop-color="#e3342b"/></linearGradient>
+    <linearGradient id="gRedD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c0241c"/><stop offset="1" stop-color="#861510"/></linearGradient>
+    <linearGradient id="gTeal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8bf0e6"/><stop offset="1" stop-color="#0e9f95"/></linearGradient>
+    <linearGradient id="gTealD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b8279"/><stop offset="1" stop-color="#06524c"/></linearGradient>
+  </defs>
+
+  <symbol id="i-region" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="44" rx="15" ry="2.6" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="10" fill="url(#gBlueD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="10" fill="url(#gBlue)"/>
+    <path d="M9 17C9 9 14 6 22 6h4c8 0 13 3 13 11 0 3-8 4-15 4S9 20 9 17z" fill="url(#gGloss)" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 19v-6h6"/><path d="M29 13h6v6"/><path d="M13 27v6h6"/><path d="M35 27v6h-6"/>
+    </g>
+    <rect x="20" y="20" width="8" height="8" rx="2.4" fill="#fff" opacity=".95"/>
+  </symbol>
+
+  <symbol id="i-window" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="44" rx="15" ry="2.6" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="9" fill="url(#gOrangeD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="9" fill="url(#gOrange)"/>
+    <path d="M9 14C9 8 13 6 20 6h8c7 0 11 2 11 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <circle cx="12" cy="11" r="1.9" fill="#fff"/><circle cx="17.5" cy="11" r="1.9" fill="#fff" opacity=".85"/><circle cx="23" cy="11" r="1.9" fill="#fff" opacity=".7"/>
+    <rect x="9.5" y="17" width="29" height="18" rx="3.5" fill="#fff" opacity=".95"/>
+    <rect x="13" y="21" width="14" height="3" rx="1.5" fill="#ffb067"/><rect x="13" y="27" width="21" height="3" rx="1.5" fill="#ffd2a3"/>
+  </symbol>
+
+  <symbol id="i-full" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="15" y="39" width="18" height="5" rx="2.5" fill="url(#gBezel)"/>
+    <rect x="20.5" y="32" width="7" height="8" fill="url(#gBezel)"/>
+    <rect x="4" y="5" width="40" height="29" rx="6" fill="url(#gBezel)"/>
+    <rect x="8" y="9" width="32" height="21" rx="3" fill="url(#gScreen)"/>
+    <path d="M8 18c0-6 2-9 8-9h16c6 0 8 3 8 9-5 3-14 3-16 3S13 21 8 18z" fill="url(#gGloss)" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 17v-4h4"/><path d="M31 13h4v4"/><path d="M13 22v4h4"/><path d="M35 22v4h-4"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-scroll" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="9" y="8" width="30" height="36" rx="8" fill="url(#gPurpleD)"/>
+    <rect x="9" y="3" width="30" height="36" rx="8" fill="url(#gPurple)"/>
+    <path d="M12 14C12 7 15 5 21 5h6c6 0 9 2 9 9 0 2-6 3-12 3s-12-1-12-3z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="15" y="10" width="18" height="3" rx="1.5" fill="#fff" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M24 18v14"/><path d="M17.5 26.5 24 33l6.5-6.5"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-gear" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="url(#gSlateD)">
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(45 24 22)"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(90 24 22)"/>
+      <rect x="20.5" y="2" width="7" height="40" rx="2.5" transform="rotate(135 24 22)"/>
+      <circle cx="24" cy="22" r="14.5"/>
+    </g>
+    <g fill="url(#gSlate)">
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(45 24 21)"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(90 24 21)"/>
+      <rect x="20.5" y="1" width="7" height="40" rx="2.5" transform="rotate(135 24 21)"/>
+      <circle cx="24" cy="21" r="14.5"/>
+    </g>
+    <path d="M12 16c3-6 8-8 12-8s9 2 12 8c-5 3-19 3-24 0z" fill="url(#gGloss)" opacity=".8"/>
+    <circle cx="24" cy="21" r="6.2" fill="#eef3fb"/><circle cx="24" cy="21" r="6.2" fill="none" stroke="#5d6d8c" stroke-width="1.4" opacity=".6"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="rotate(45 24 24) translate(0 3)" fill="url(#gYellowD)"><rect x="18" y="2" width="12" height="30" rx="2.5"/><path d="M18 32h12l-6 12z"/></g>
+    <g transform="rotate(45 24 24)">
+      <rect x="18" y="2" width="12" height="30" rx="2.5" fill="url(#gYellow)"/>
+      <rect x="18" y="2" width="12" height="6" rx="2.5" fill="#ff8f86"/>
+      <rect x="18" y="8" width="12" height="3.5" fill="url(#gSlate)"/>
+      <path d="M18 32h12l-6 12z" fill="#ffe2b8"/><path d="M22 40.5h4L24 44z" fill="#3a4764"/>
+      <rect x="20" y="4" width="3" height="26" rx="1.5" fill="#fff" opacity=".45"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-copy" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="15" y="11" width="26" height="31" rx="7" fill="url(#gBlueD)"/>
+    <rect x="15" y="8" width="26" height="31" rx="7" fill="url(#gBlue)" opacity=".7"/>
+    <rect x="6" y="9" width="26" height="31" rx="7" fill="url(#gBlueD)"/>
+    <rect x="6" y="5" width="26" height="31" rx="7" fill="url(#gBlue)"/>
+    <path d="M9 14c0-6 3-8 8-8h6c5 0 8 2 8 8 0 2-5 3-11 3s-11-1-11-3z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="11" y="15" width="16" height="3" rx="1.5" fill="#fff" opacity=".9"/><rect x="11" y="21" width="16" height="3" rx="1.5" fill="#fff" opacity=".75"/><rect x="11" y="27" width="10" height="3" rx="1.5" fill="#fff" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-save" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="36" rx="8" fill="url(#gGreenD)"/>
+    <rect x="5" y="4" width="38" height="36" rx="8" fill="url(#gGreen)"/>
+    <path d="M9 14c0-6 3-8 9-8h12c6 0 9 2 9 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <rect x="14" y="4" width="20" height="13" rx="3" fill="#fff" opacity=".96"/><rect x="27" y="7" width="4" height="7" rx="1.5" fill="#16a05a"/>
+    <rect x="11" y="24" width="26" height="14" rx="3.5" fill="#fff" opacity=".96"/><rect x="15" y="28" width="14" height="2.6" rx="1.3" fill="#8fd9ae"/><rect x="15" y="33" width="10" height="2.6" rx="1.3" fill="#c6ecd6"/>
+  </symbol>
+
+  <symbol id="i-folder" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="16" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M4 12c0-3 2-5 5-5h10l5 5h15c3 0 5 2 5 5v21c0 3-2 5-5 5H9c-3 0-5-2-5-5z" fill="url(#gYellowD)"/>
+    <path d="M4 14c0-3 2-5 5-5h10l5 5h15c3 0 5 2 5 5v3H4z" fill="url(#gYellow)" opacity=".85"/>
+    <rect x="4" y="17" width="40" height="23" rx="5" fill="url(#gYellow)"/>
+    <path d="M7 24c0-4 2-6 6-6h22c4 0 6 2 6 6-6 3-34 3-34 0z" fill="url(#gGloss)" opacity=".7"/>
+  </symbol>
+
+  <symbol id="i-print" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="15" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="13" y="3" width="22" height="14" rx="2.5" fill="#fff" stroke="#c9d3e6" stroke-width="1.2"/>
+    <rect x="17" y="7" width="14" height="2.2" rx="1.1" fill="#9db8f0"/><rect x="17" y="11" width="10" height="2.2" rx="1.1" fill="#c9d8f5"/>
+    <rect x="4" y="18" width="40" height="20" rx="6" fill="url(#gSlateD)"/>
+    <rect x="4" y="14" width="40" height="20" rx="6" fill="url(#gSlate)"/>
+    <path d="M8 19c0-3 2-4 6-4h20c4 0 6 1 6 4 0 1.5-7 2-16 2s-16-.5-16-2z" fill="url(#gGloss)" opacity=".7"/>
+    <circle cx="37" cy="21" r="2" fill="#16a05a"/>
+    <rect x="11" y="27" width="26" height="3" rx="1.5" fill="#3a4764"/>
+    <rect x="13" y="28.5" width="22" height="13" rx="2" fill="#fff" stroke="#c9d3e6" stroke-width="1.2"/>
+    <rect x="17" y="32" width="14" height="2.2" rx="1.1" fill="#9db8f0"/><rect x="17" y="36" width="9" height="2.2" rx="1.1" fill="#c9d8f5"/>
+  </symbol>
+
+  <symbol id="i-trash" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M10 16h28l-2.4 25c-.2 2-1.6 3.4-3.6 3.4H16c-2 0-3.4-1.4-3.6-3.4z" fill="url(#gRedD)"/>
+    <path d="M10 13h28l-2.4 25c-.2 2-1.6 3.4-3.6 3.4H16c-2 0-3.4-1.4-3.6-3.4z" fill="url(#gRed)"/>
+    <rect x="6" y="8" width="36" height="7" rx="3.5" fill="url(#gRedD)"/><rect x="6" y="6" width="36" height="7" rx="3.5" fill="url(#gRed)"/>
+    <rect x="18" y="2" width="12" height="6" rx="3" fill="url(#gRed)"/><rect x="21" y="4.5" width="6" height="2.2" rx="1.1" fill="#861510" opacity=".6"/>
+    <g stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".92"><path d="M17 20l1 15"/><path d="M24 20v15"/><path d="M31 20l-1 15"/></g>
+  </symbol>
+
+  <symbol id="i-select" viewBox="0 0 48 48">
+    <ellipse cx="26" cy="45" rx="11" ry="2.2" fill="#000" opacity=".2"/>
+    <path d="M13 8v31l8.5-7.5 5.5 12 6-2.8-5.5-11.6H35z" fill="url(#gBlueD)" transform="translate(0 2.5)"/>
+    <path d="M13 6v31l8.5-7.5 5.5 12 6-2.8-5.5-11.6H35z" fill="url(#gBlue)" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M16 12v14l4.5-4c.6-.5 1.2-.6 2-.6h5z" fill="url(#gGloss)" opacity=".8"/>
+  </symbol>
+
+  <symbol id="i-rect" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="7" y="12" width="34" height="27" rx="6" fill="none" stroke="url(#gRedD)" stroke-width="6"/>
+    <rect x="7" y="9" width="34" height="27" rx="6" fill="none" stroke="url(#gRed)" stroke-width="6"/>
+    <path d="M12 12c4-2 20-2 24 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-ellipse" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <ellipse cx="24" cy="26" rx="17" ry="13" fill="none" stroke="url(#gOrangeD)" stroke-width="6"/>
+    <ellipse cx="24" cy="23" rx="17" ry="13" fill="none" stroke="url(#gOrange)" stroke-width="6"/>
+    <path d="M12 17c4-4 20-4 24 0" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" opacity=".6"/>
+  </symbol>
+
+  <symbol id="i-line" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M9 38 39 10" stroke="url(#gPurpleD)" stroke-width="7" stroke-linecap="round" transform="translate(0 3)"/>
+    <path d="M9 38 39 10" stroke="url(#gPurple)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M12 33 33 13" stroke="#fff" stroke-width="1.8" stroke-linecap="round" opacity=".55"/>
+  </symbol>
+
+  <symbol id="i-arrow" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="url(#gGreenD)" stroke="url(#gGreenD)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 38 35 12" fill="none"/><path d="M20 10h18v18z"/></g>
+    <g fill="url(#gGreen)" stroke="url(#gGreen)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 38 35 12" fill="none"/><path d="M20 10h18v18z"/></g>
+  </symbol>
+
+  <symbol id="i-text" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="9" fill="url(#gPurpleD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="9" fill="url(#gPurple)"/>
+    <path d="M9 14c0-6 4-8 10-8h10c6 0 10 2 10 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <path d="M13 13h22M24 13v22" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none"/>
+  </symbol>
+
+  <symbol id="i-crop" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="14" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="none" stroke="url(#gTealD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v25a5 5 0 0 0 5 5h25"/><path d="M3 13h25a5 5 0 0 1 5 5v25"/></g>
+    <g fill="none" stroke="url(#gTeal)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v25a5 5 0 0 0 5 5h25"/><path d="M3 13h25a5 5 0 0 1 5 5v25"/></g>
+  </symbol>
+
+  <symbol id="i-undo" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="none" stroke="url(#gBlueD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+    <g fill="none" stroke="url(#gBlue)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+  </symbol>
+
+  <symbol id="i-redo" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(48 0) scale(-1 1)">
+      <g transform="translate(0 3)" fill="none" stroke="url(#gBlueD)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+      <g fill="none" stroke="url(#gBlue)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 15h15a10 10 0 0 1 0 20H17"/><path d="M22 7l-8 8 8 8"/></g>
+    </g>
+  </symbol>
+  <symbol id="i-highlight" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="15" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="4" y="35" width="40" height="9" rx="4" fill="url(#gYellowD)"/>
+    <rect x="4" y="32" width="40" height="9" rx="4" fill="url(#gYellow)"/>
+    <g transform="rotate(35 24 18)">
+      <rect x="15" y="2" width="18" height="24" rx="4" fill="url(#gSlateD)"/>
+      <rect x="15" y="0" width="18" height="24" rx="4" fill="url(#gSlate)"/>
+      <path d="M17 24h14l-2 9h-10z" fill="url(#gYellow)"/>
+      <rect x="18" y="4" width="4" height="16" rx="2" fill="#fff" opacity=".5"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-step" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <circle cx="24" cy="26" r="18" fill="url(#gRedD)"/>
+    <circle cx="24" cy="23" r="18" fill="url(#gRed)"/>
+    <circle cx="24" cy="23" r="15" fill="none" stroke="#fff" stroke-width="2.4"/>
+    <path d="M10 17c4-7 24-7 28 0-6 3-22 3-28 0z" fill="url(#gGloss)" opacity=".7"/>
+    <text x="24" y="31" text-anchor="middle" font-size="21" font-weight="800" fill="#fff" font-family="Segoe UI, Malgun Gothic, sans-serif">1</text>
+  </symbol>
+
+  <symbol id="i-mosaic" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="15" ry="2.4" fill="#000" opacity=".2"/>
+    <g transform="translate(0 3)" fill="url(#gBlueD)"><rect x="5" y="4" width="12" height="12" rx="2.5"/><rect x="18" y="4" width="12" height="12" rx="2.5"/><rect x="31" y="4" width="12" height="12" rx="2.5"/><rect x="5" y="17" width="12" height="12" rx="2.5"/><rect x="18" y="17" width="12" height="12" rx="2.5"/><rect x="31" y="17" width="12" height="12" rx="2.5"/><rect x="5" y="30" width="12" height="12" rx="2.5"/><rect x="18" y="30" width="12" height="12" rx="2.5"/><rect x="31" y="30" width="12" height="12" rx="2.5"/></g>
+    <g>
+      <rect x="5" y="4" width="12" height="12" rx="2.5" fill="url(#gBlue)"/><rect x="18" y="4" width="12" height="12" rx="2.5" fill="url(#gSlate)"/><rect x="31" y="4" width="12" height="12" rx="2.5" fill="url(#gBlue)"/>
+      <rect x="5" y="17" width="12" height="12" rx="2.5" fill="url(#gSlate)"/><rect x="18" y="17" width="12" height="12" rx="2.5" fill="url(#gBlue)"/><rect x="31" y="17" width="12" height="12" rx="2.5" fill="url(#gSlate)"/>
+      <rect x="5" y="30" width="12" height="12" rx="2.5" fill="url(#gBlue)"/><rect x="18" y="30" width="12" height="12" rx="2.5" fill="url(#gSlate)"/><rect x="31" y="30" width="12" height="12" rx="2.5" fill="url(#gBlue)"/>
+    </g>
+  </symbol>
+
+  <symbol id="i-blur" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="13" ry="2.4" fill="#000" opacity=".2"/>
+    <path d="M24 5C24 5 9 21 9 31a15 15 0 0 0 30 0C39 21 24 5 24 5z" fill="url(#gTealD)" transform="translate(0 3)"/>
+    <path d="M24 5C24 5 9 21 9 31a15 15 0 0 0 30 0C39 21 24 5 24 5z" fill="url(#gTeal)"/>
+    <path d="M15 28c0-5 3-9 7-14-1 6 0 8-3 12-2 3-4 3-4 2z" fill="url(#gGloss)" opacity=".85"/>
+    <g stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity=".7"><path d="M17 36c4 2 10 2 14 0"/><path d="M19 40c3 1 7 1 10 0" opacity=".6"/></g>
+  </symbol>
+  <symbol id="i-ocr" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="15" ry="2.4" fill="#000" opacity=".2"/>
+    <rect x="5" y="8" width="38" height="35" rx="9" fill="url(#gTealD)"/>
+    <rect x="5" y="4" width="38" height="35" rx="9" fill="url(#gTeal)"/>
+    <path d="M9 14c0-6 4-8 10-8h10c6 0 10 2 10 8 0 2-6 3-15 3S9 16 9 14z" fill="url(#gGloss)" opacity=".7"/>
+    <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17v-4h4"/><path d="M33 13h4v4"/><path d="M11 27v4h4"/><path d="M37 27v4h-4"/></g>
+    <path d="M16 18h16M24 18v13" stroke="#fff" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+  </symbol>
+
+  <symbol id="i-pin" viewBox="0 0 48 48">
+    <ellipse cx="24" cy="45" rx="12" ry="2.2" fill="#000" opacity=".2"/>
+    <g transform="rotate(35 24 22)">
+      <path d="M16 4h16l-2 14 6 6v3H12v-3l6-6z" fill="url(#gRedD)" transform="translate(0 2.5)"/>
+      <path d="M16 3h16l-2 14 6 6v3H12v-3l6-6z" fill="url(#gRed)"/>
+      <path d="M19 6h4l-1 10-4 4z" fill="#fff" opacity=".45"/>
+      <rect x="22" y="26" width="4" height="15" rx="2" fill="url(#gSlate)"/>
+    </g>
+  </symbol>
+</svg>
+<a class="skip" href="#main">본문으로 건너뛰기</a>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="img/icon.png" alt="">CaptureBox</a>
+    <nav class="menu" aria-label="주 메뉴">
+      <a href="#features">기능</a><a href="#gallery">화면</a><a href="#ocr">글자 인식</a><a href="#install">설치</a><a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/cybereun/CaptureBox" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <span class="badge"><b data-version>최신 버전</b> · Windows · 무료 오픈소스</span>
+      <h1>캡처하고, 꾸미고,<br><span class="grad">글자까지 복사</span></h1>
+      <p class="lead">스크린샷 한 장 정리하려고 앱 여러 개 열지 마세요. 캡처부터 모자이크, 한국어 글자 인식, 화면 고정까지 CaptureBox 하나로 끝납니다.</p>
+      <div class="cta">
+        <a class="btn primary" data-download href="https://github.com/cybereun/CaptureBox/releases/latest">
+          <svg aria-hidden="true"><use href="#i-save"/></svg>
+          <span>Windows용 다운로드<small data-file>설치 파일 받기</small></span>
+        </a>
+        <a class="btn ghost" href="https://github.com/cybereun/CaptureBox" target="_blank" rel="noopener">GitHub에서 보기</a>
+      </div>
+      <p class="note">처음 설치할 때 Windows SmartScreen 경고가 뜰 수 있어요 (코드 서명 없음). <b>추가 정보 → 실행</b>을 누르시면 됩니다.</p>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <img class="a" src="img/card-04.png" alt="" loading="eager">
+      <img class="b" src="img/card-01.png" alt="" loading="eager">
+      <img class="c" src="img/card-06.png" alt="" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">기능</div>
+    <h2>캡처 앱 하나에 필요한 건 다 넣었어요</h2>
+    <p class="sec-lead">찍는 순간보다 찍은 뒤가 더 번거롭죠. 꾸미고, 가리고, 읽고, 고정하는 과정을 한 앱 안에서 끝냅니다.</p>
+    <div class="grid">
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-region"/></svg><h3>캡처 4종</h3><p>영역·창·전체 화면·스크롤. 단축키 <kbd>Ctrl+Alt+1</kbd> <kbd>2</kbd> <kbd>3</kbd>으로 바로 찍고, 키는 설정에서 바꿀 수 있어요.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-scroll"/></svg><h3>스크롤 캡처</h3><p>긴 페이지를 자동으로 스크롤하면서 한 장으로 이어 붙여요. 회의 자료, 긴 대화, 보고서에 좋아요.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-edit"/></svg><h3>바로 꾸미기</h3><p>사각틀·원·화살표·번호·형광펜·글자·자르기. 편집본은 새 파일로 저장되고 원본은 그대로 남아요.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-mosaic"/></svg><h3>모자이크·블러</h3><p>이름, 번호, 계좌 같은 개인정보를 공유하기 전에 한 번에 가려요.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-ocr"/></svg><h3>글자 인식(OCR)</h3><p>이미지 속 글자를 읽어 클립보드로 복사해요. 한국어 정밀 모델이 들어 있어 인터넷 없이 동작합니다.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-pin"/></svg><h3>화면에 고정</h3><p>캡처를 작은 창으로 모든 창 위에 띄워 두세요. 끌어서 이동, <kbd>Ctrl</kbd>+휠 크기, <kbd>Alt</kbd>+휠 투명도.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-print"/></svg><h3>클립보드·인쇄</h3><p>‘캡처 시 대시보드 열지 않음’으로 바로 붙여넣기. <kbd>Ctrl+P</kbd> 인쇄 미리보기에서 용지·방향·여백도 고를 수 있어요.</p></article>
+      <article class="card reveal"><svg aria-hidden="true"><use href="#i-gear"/></svg><h3>늘 대기 · 자동 업데이트</h3><p>창을 닫아도 트레이에서 대기해요. 윈도우 시작 시 자동 실행(선택)과 새 버전 알림·재설치까지 지원합니다.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="gallery">
+  <div class="wrap">
+    <div class="eyebrow">화면 둘러보기</div>
+    <h2>이렇게 써요</h2>
+    <p class="sec-lead">카드를 누르면 크게 볼 수 있어요. 화면 속 이름·번호는 모두 예시용 가짜 데이터입니다.</p>
+    <div class="gallery" role="list">
+      <button class="shot" role="listitem" data-full="img/card-01.png" data-alt="CaptureBox 앱 화면과 주요 기능"><img src="img/card-01.png" alt="CaptureBox 앱 화면과 주요 기능" loading="lazy"><span>① 한 앱으로 끝</span></button>
+      <button class="shot" role="listitem" data-full="img/card-02.png" data-alt="영역, 창, 전체 화면, 스크롤 캡처"><img src="img/card-02.png" alt="영역, 창, 전체 화면, 스크롤 캡처" loading="lazy"><span>② 캡처 4종 + 단축키</span></button>
+      <button class="shot" role="listitem" data-full="img/card-03.png" data-alt="긴 페이지를 한 장으로 이어붙인 스크롤 캡처"><img src="img/card-03.png" alt="긴 페이지를 한 장으로 이어붙인 스크롤 캡처" loading="lazy"><span>③ 긴 페이지를 한 장으로</span></button>
+      <button class="shot" role="listitem" data-full="img/card-04.png" data-alt="편집기로 표시를 넣은 화면"><img src="img/card-04.png" alt="편집기로 표시를 넣은 화면" loading="lazy"><span>④ 바로 꾸미기</span></button>
+      <button class="shot" role="listitem" data-full="img/card-05.png" data-alt="개인정보를 모자이크와 블러로 가리기 전과 후"><img src="img/card-05.png" alt="개인정보를 모자이크와 블러로 가리기 전과 후" loading="lazy"><span>⑤ 모자이크·블러</span></button>
+      <button class="shot" role="listitem" data-full="img/card-06.png" data-alt="이미지 속 글자 인식 결과"><img src="img/card-06.png" alt="이미지 속 글자 인식 결과" loading="lazy"><span>⑥ 글자 인식</span></button>
+      <button class="shot" role="listitem" data-full="img/card-07.png" data-alt="화면 위에 고정된 캡처"><img src="img/card-07.png" alt="화면 위에 고정된 캡처" loading="lazy"><span>⑦ 화면에 고정</span></button>
+      <button class="shot" role="listitem" data-full="img/card-08.png" data-alt="트레이 메뉴와 설정 화면"><img src="img/card-08.png" alt="트레이 메뉴와 설정 화면" loading="lazy"><span>⑧ 트레이·자동 실행</span></button>
+    </div>
+  </div>
+</section>
+
+<section id="ocr">
+  <div class="wrap ocr">
+    <div>
+      <div class="eyebrow">글자 인식</div>
+      <h2>한국어를 제대로 읽어요</h2>
+      <p class="sec-lead" style="margin-bottom:26px">PaddleOCR PP-OCRv5 한국어 모델이 앱 안에 들어 있어요. 작은 글자와 한글에서 Windows 내장 OCR보다 훨씬 정확합니다.</p>
+      <ul class="list">
+        <li><span><b>오프라인</b>으로 동작해요. 이미지가 PC 밖으로 나가지 않아요.</span></li>
+        <li><span>줄바꿈이 유지돼서 붙여넣기 좋아요.</span></li>
+        <li><span>정밀 모드를 쓸 수 없으면 Windows 내장 OCR로 <b>자동 대체</b>돼요.</span></li>
+      </ul>
+    </div>
+    <div class="bars reveal" aria-label="글자 오류율 비교">
+      <div class="bar-row"><div class="bar-head"><span>CaptureBox 정밀 모드</span><span>0.5%</span></div><div class="track"><div class="fill best" style="--w:6%"></div></div></div>
+      <div class="bar-row"><div class="bar-head"><span>Windows 내장 OCR</span><span>6.9%</span></div><div class="track"><div class="fill other" style="--w:86%"></div></div></div>
+      <div class="bar-row"><div class="bar-head"><span>Tesseract (한국어+영어)</span><span>7.6%</span></div><div class="track"><div class="fill other" style="--w:95%"></div></div></div>
+      <p class="small">글자 오류율 (낮을수록 좋음). 화면 캡처 같은 합성 이미지 60줄(글꼴·크기·배경 10종)로 잰 자체 시험 결과예요. 실제 이미지에서는 달라질 수 있고, 띄어쓰기는 가끔 빠질 수 있어요.</p>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="eyebrow">설치</div>
+    <h2>1분이면 시작해요</h2>
+    <p class="sec-lead">관리자 권한이 필요 없고, 설치하면 바로 실행돼요.</p>
+    <div class="steps">
+      <div class="step reveal"><h3>설치 파일 받기</h3><p>아래 버튼으로 <code>CaptureBox-Setup-x.x.x.exe</code>를 내려받아요.</p></div>
+      <div class="step reveal"><h3>실행하기</h3><p>SmartScreen 경고가 뜨면 <b>추가 정보 → 실행</b>을 눌러요. 코드 서명이 아직 없어서 나오는 경고예요.</p></div>
+      <div class="step reveal"><h3>단축키로 캡처</h3><p><kbd>Ctrl+Alt+1</kbd>로 영역 캡처! 이후 업데이트는 앱이 알아서 알려줘요.</p></div>
+    </div>
+    <div class="install-cta">
+      <a class="btn primary" data-download href="https://github.com/cybereun/CaptureBox/releases/latest"><svg aria-hidden="true"><use href="#i-save"/></svg><span>Windows용 다운로드 <small data-version>최신 버전</small></span></a>
+      <a class="btn ghost" href="https://github.com/cybereun/CaptureBox/releases" target="_blank" rel="noopener">모든 버전 보기</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="eyebrow">자주 묻는 질문</div>
+    <h2>궁금한 점</h2>
+    <div class="faq" style="margin-top:28px">
+      <details><summary>정말 무료인가요?</summary><p>네, 무료이고 MIT 라이선스 오픈소스예요. 코드는 GitHub에서 볼 수 있어요.</p></details>
+      <details><summary>어떤 운영체제에서 쓸 수 있나요?</summary><p>Windows 10/11 전용이에요. 맥과 리눅스, 모바일은 지원하지 않아요.</p></details>
+      <details><summary>내 캡처가 서버로 전송되나요?</summary><p>아니요. 캡처·편집·글자 인식은 모두 내 PC 안에서 처리돼요. 인터넷은 새 버전을 확인하는 데만 써요.</p></details>
+      <details><summary>설치할 때 경고가 떠요</summary><p>아직 코드 서명 인증서를 쓰지 않아서 Windows SmartScreen이 경고를 보여줘요. <b>추가 정보 → 실행</b>을 누르면 됩니다.</p></details>
+      <details><summary>캡처한 파일은 어디에 저장되나요?</summary><p>기본은 <code>사진\Screenshots</code> 폴더예요. 설정에서 원하는 폴더로 바꾸면 그 위치가 계속 유지돼요.</p></details>
+      <details><summary>스크롤 캡처가 잘 안 되는 화면이 있나요?</summary><p>고정 헤더나 사이드바는 빼고 스크롤되는 부분만 선택하면 결과가 깔끔해요. 영상·애니메이션 영역이나 무한 스크롤 페이지는 정확도가 떨어질 수 있어요.</p></details>
+      <details><summary>버그나 아이디어는 어디에 남기나요?</summary><p><a href="https://github.com/cybereun/CaptureBox/issues" target="_blank" rel="noopener">GitHub Issues</a>에 남겨 주세요.</p></details>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 <a href="https://github.com/cybereun" target="_blank" rel="noopener">cybereun</a> · MIT License</span>
+    <span><a href="https://github.com/cybereun/CaptureBox" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/cybereun/CaptureBox/releases" target="_blank" rel="noopener">릴리즈</a> · <a href="https://github.com/cybereun/CaptureBox/blob/main/THIRD_PARTY.md" target="_blank" rel="noopener">오픈소스 고지</a></span>
+  </div>
+</footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-label="이미지 크게 보기"><img alt=""></div>
+<script src="app.js"></script>
+</body>
+</html>

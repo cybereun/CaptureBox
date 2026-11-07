@@ -1,0 +1,31 @@
+# docs/ 의 사이트를 GitHub Packages(npm)에 게시합니다. (사이트 자체는 GitHub Pages 가 main 브랜치의 /docs 를 직접 서비스합니다)
+name: 사이트 패키지 게시
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: '@cybereun'
+      - name: 버전 정하기 (실행 번호 사용)
+        working-directory: docs
+        run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version
+      - name: 게시
+        working-directory: docs
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

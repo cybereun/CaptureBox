@@ -1,0 +1,17 @@
+{
+  "name": "@cybereun/capturebox-site",
+  "version": "1.0.0",
+  "description": "CaptureBox 홍보 사이트 — 캡처하고, 꾸미고, 글자까지 복사하는 Windows 캡처 앱",
+  "homepage": "https://cybereun.github.io/CaptureBox/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cybereun/CaptureBox.git",
+    "directory": "docs"
+  },
+  "bugs": "https://github.com/cybereun/CaptureBox/issues",
+  "license": "MIT",
+  "author": "cybereun",
+  "keywords": ["capturebox", "screenshot", "screen-capture", "ocr", "windows", "landing-page"],
+  "files": ["index.html", "style.css", "app.js", "img/", "README.md"],
+  "publishConfig": { "registry": "https://npm.pkg.github.com" }
+}
