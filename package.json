@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/stitch.test.js",
+    "test": "node test/stitch.test.js && node test/vault.test.js",
     "dist": "electron-builder --win --publish never",
     "release": "electron-builder --win --publish always",
     "verify": "node scripts/verify.js",
