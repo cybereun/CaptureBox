@@ -1,0 +1,32 @@
+CaptureBox 개인정보 처리방침
+시행일: 2026년 11월 8일
+개발자: Lebi_Cybereun (GitHub: cybereun)
+
+1. 접근하는 정보와 처리 목적
+CaptureBox는 사용자가 캡처를 시작할 때 선택한 화면 영역·창 또는 화면 이미지에 접근합니다. 사용자가 보관된 이미지에 OCR을 실행하면 해당 이미지의 글자를 읽어 텍스트로 변환합니다. 화면과 OCR 결과에는 이름, 연락처, 문서 내용 등 사람을 알아볼 수 있는 정보가 포함될 수 있습니다. 앱은 이 정보를 캡처, 편집(자르기·주석·모자이크·블러), OCR, 화면 고정, 인쇄와 파일 저장 기능을 제공하기 위해 처리합니다. 앱은 개인정보를 자동으로 식별하거나 분류하지 않습니다.
+
+2. 로컬 저장과 클립보드
+캡처 이미지, 미리보기 이미지와 보관함 색인은 PC에 저장됩니다. 기본 위치는 사진\Screenshots이며, 설정에서 사용자가 지정한 다른 폴더를 이용할 수 있습니다. 앱 설정은 PC의 CaptureBox 앱 데이터 폴더에 저장됩니다. OCR 처리용 임시 이미지 파일은 처리가 끝난 뒤 삭제됩니다.
+
+캡처 후 자동 복사는 기본으로 켜져 있어 캡처 이미지가 Windows 클립보드에 복사됩니다. 사용자는 설정에서 자동 복사를 끌 수 있습니다. 클립보드 전용 모드에서는 캡처가 클립보드에 복사됩니다. OCR 결과도 OCR 실행 후 Windows 클립보드에 복사됩니다. 클립보드 내용은 Windows와 사용자가 실행하는 다른 앱의 동작에 따라 접근될 수 있습니다.
+
+앱은 캡처 파일이나 설정에 자동 만료 기간을 두지 않습니다. 파일은 사용자가 앱 보관함 또는 파일 탐색기에서 삭제할 때까지 PC에 남습니다.
+
+3. 네트워크와 제3자 제공
+Microsoft Store 버전은 캡처 이미지, OCR 결과 또는 앱 설정을 개발자나 서버로 전송하지 않으며, 앱 기능을 위해 외부 서버에 접속하지 않습니다. 설치와 업데이트는 Microsoft Store가 처리하며, 해당 서비스의 개인정보 처리는 Microsoft 정책을 따릅니다.
+
+GitHub 설치 버전은 새 버전을 확인하고 업데이트를 받기 위해 GitHub 공개 릴리즈 서비스에 접속할 수 있습니다. 이때 IP 주소 등 일반적인 연결 정보가 GitHub에 전달될 수 있습니다. 캡처 이미지, OCR 결과와 앱 설정은 GitHub로 전송하지 않습니다.
+
+사용자가 클립보드에서 다른 앱에 붙여넣거나 파일을 저장·인쇄·공유하면 사용자가 선택한 Windows 기능, 앱, 장치 또는 서비스로 정보가 전달될 수 있습니다. 이후 처리는 해당 서비스의 개인정보처리방침과 설정을 따릅니다. 공개 온라인 서비스에 캡처나 OCR 결과를 올리기 전에 내용을 확인해 주세요.
+
+4. 보관 및 보호
+캡처 파일과 설정은 PC의 로컬 파일 시스템에 저장됩니다. 앱은 캡처 파일을 별도의 암호화 저장소에 넣거나 서버에 백업하지 않습니다. 파일 접근 보호는 Windows 계정과 장치의 보안 설정에 따르므로, 공유 PC에서는 계정 잠금과 장치 암호화를 사용하고 불필요한 캡처 파일을 삭제해 주세요. 앱을 삭제해도 사용자가 지정한 폴더의 캡처 파일이 자동 삭제된다고 보장하지 않습니다.
+
+5. 사용자의 통제와 문의
+사용자는 캡처 및 OCR을 직접 시작하고 자동 복사 설정을 변경할 수 있습니다. 캡처 파일은 앱 또는 파일 탐색기에서 열람·수정·삭제할 수 있습니다. 로컬 데이터는 개발자에게 전송되지 않으므로 개발자가 원격으로 열람·수정·삭제할 수 없습니다. 개인정보 처리방침 문의는 https://github.com/cybereun/CaptureBox/issues 에 남겨 주세요. 공개 이슈에는 캡처 이미지, OCR 결과 등 개인정보를 올리지 마세요.
+
+6. 기타
+앱은 계정, 광고, 분석·사용 통계 또는 원격 오류 보고 기능을 제공하지 않습니다. 글자 인식에는 앱에 포함된 PaddleOCR PP-OCRv5 모델과 ONNX Runtime을 사용합니다. 방침이 바뀌면 이 문서와 개인정보처리방침 페이지에 변경일과 함께 게시합니다.
+
+Privacy Policy (English summary)
+CaptureBox accesses the screen or an image when you start a capture or OCR operation. These images or OCR results may contain personal information. The Microsoft Store build processes them locally and does not send them to the developer or a server. Captures are stored in your selected folder (Pictures\Screenshots by default); capture images are copied to the Windows clipboard by default, and OCR text is copied there when OCR runs. You can turn off automatic copy, delete files in the app or File Explorer, and clear the clipboard. The app does not use accounts, ads, analytics, telemetry, or remote crash reporting. The Microsoft Store build does not initiate network connections. The GitHub build may contact GitHub to check for and download updates, sending ordinary connection data such as your IP address, but not captures, OCR text, or settings. Data stored on your PC is protected by your Windows and device security settings; the app does not create a separate encrypted store. Contact: https://github.com/cybereun/CaptureBox/issues. Do not post personal information in public issues.
