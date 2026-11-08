@@ -48,6 +48,17 @@
   $('updLater').addEventListener('click', () => { dismissed = u.latest; render(); });
   $('setCheck').addEventListener('click', () => snap.checkUpdate());
   $('openSettings').addEventListener('click', () => { $('settings').hidden = false; });
+  $('openNotices').addEventListener('click', async () => {
+    const r = await snap.openNotices();
+    toast(r.ok ? '오픈소스 및 라이선스 고지를 열었습니다' : `고지 파일을 열지 못했습니다${r.message ? `: ${r.message}` : ''}`);
+  });
+  $('openPrivacyPolicy').addEventListener('click', async () => {
+    try {
+      const r = await snap.openPrivacyPolicy();
+      if (!r.ok) toast(`개인정보처리방침을 열지 못했습니다${r.message ? `: ${r.message}` : ''}`);
+    }
+    catch { toast('개인정보처리방침을 열지 못했습니다'); }
+  });
   $('setClose').addEventListener('click', () => ($('settings').hidden = true));
   $('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('settings').hidden) $('settings').hidden = true; });

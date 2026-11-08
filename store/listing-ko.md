@@ -4,10 +4,10 @@
 
 ## 1. 패키지 올리기
 1. 로컬 디스크(구글 드라이브 X)에서 `npm ci` → `npm run msix`
-2. 생성된 `dist-store/CaptureBox-Store-1.5.2.appx` (또는 빌드 도구가 만든 `.msix`)를 Partner Center > 제출 > **패키지**에 올립니다.
+2. 생성된 `dist-store/CaptureBox-Store-1.5.3.appx` (또는 빌드 도구가 만든 `.msix`)를 Partner Center > 제출 > **패키지**에 올립니다.
    - `.appx`는 `.msix`와 같은 패키지 형식이며 Store가 둘 다 받습니다.
    - Store에 올리는 패키지는 **서명하지 않습니다**(Store가 서명). 그래서 내 PC에 직접 설치해 볼 수는 없습니다.
-3. 새 제출마다 `package.json`의 `version`을 올려야 합니다 (이 제출은 `1.5.2` → `1.5.2.0` 입니다. 마지막 자리는 Store 예약값이라 0이어야 합니다).
+3. 새 제출마다 `package.json`의 `version`을 올려야 합니다 (이 제출 버전은 `1.5.3` → 패키지 버전 `1.5.3.0` 입니다. 마지막 자리는 Store 예약값이라 0이어야 합니다).
 
 ## 2. 제품 설명
 **짧은 설명 (100자 이내)**
@@ -60,11 +60,11 @@
 ## 3. 필수 링크
 | 항목 | 값 |
 |---|---|
-| 개인정보처리방침 URL | https://cybereun.github.io/CaptureBox/privacy.html |
+| 개인정보처리방침 | 공개 페이지 갱신 전에는 Partner Center의 텍스트 입력 옵션을 선택해 `store/privacy-policy-ko.txt` 전체 내용을 입력합니다. |
 | 웹사이트 | https://cybereun.github.io/CaptureBox/ |
 | 지원 연락처 | https://github.com/cybereun/CaptureBox/issues |
 
-Partner Center에서 개인정보 접근 여부가 저장 후 `예`로 되돌아가면 패키지가 개인정보에 접근할 수 있는 기능을 선언했기 때문일 수 있습니다. Microsoft는 이런 패키지를 감지하면 `예`로 표시하고 개인정보처리방침을 요구할 수 있습니다. 개인정보처리방침 URL로 `https://cybereun.github.io/CaptureBox/privacy.html`을 입력하거나, 직접 텍스트 입력을 선택한 경우 `store/privacy-policy-ko.txt`의 내용을 사용하세요. 정책 문서는 캡처 화면과 OCR 결과에 개인정보가 포함될 수 있으나 Store 앱은 이를 로컬에서 처리한다는 점을 설명합니다.
+이 제품은 사용자가 캡처/OCR을 시작하면 개인정보가 들어 있을 수 있는 화면과 이미지를 읽으므로 개인정보 항목은 `예`로 선언합니다. PC 안에서만 처리하고 개발자 서버로 전송하지 않는다는 점만으로 `아니요`를 선택하면 안 됩니다. 현재 공개 URL(`https://cybereun.github.io/CaptureBox/privacy.html`)은 최신 암호화 설명이 반영되지 않았으므로 갱신을 확인하기 전에는 사용하지 마세요. Partner Center에서 정책 텍스트 직접 제공을 선택해 `store/privacy-policy-ko.txt`의 전체 내용을 붙여 넣습니다. 공개 페이지가 최신 문서와 일치하고 외부에서 열리는지 확인한 뒤에만 URL 입력 방식으로 바꾸세요.
 
 ## 4. 인증용 메모 (Partner Center > 제출 > 인증 메모, 그리고 `runFullTrust` 사유)
 Electron 앱은 `runFullTrust` 제한 기능이 필요합니다. 사유 입력란에 아래를 붙여 넣으세요.

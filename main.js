@@ -834,6 +834,20 @@ ipcMain.handle('store:reset', async () => {
   return { ok: true, ...storeInfo() };
 });
 ipcMain.handle('store:open', () => { assertStoreReady(); return shell.openPath(assetsDir); });
+ipcMain.handle('notices:open', async () => {
+  const noticePath = app.isPackaged
+    ? path.join(process.resourcesPath, 'THIRD_PARTY_NOTICES.txt')
+    : path.join(__dirname, 'store', 'THIRD_PARTY_NOTICES.txt');
+  const error = await shell.openPath(noticePath);
+  return error ? { ok: false, message: error } : { ok: true };
+});
+ipcMain.handle('privacy:open', async () => {
+  const policyPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'privacy-policy-ko.txt')
+    : path.join(__dirname, 'store', 'privacy-policy-ko.txt');
+  const error = await shell.openPath(policyPath);
+  return error ? { ok: false, message: error } : { ok: true };
+});
 ipcMain.handle('update:get', () => upd);
 ipcMain.handle('update:check', () => checkUpdate());
 ipcMain.handle('update:install', () => { if (updater && upd.state === 'ready') updater.quitAndInstall(true, true); });
