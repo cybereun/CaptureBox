@@ -25,9 +25,27 @@ if (!fs.existsSync(exe)) { console.error(`실행 파일이 없습니다: ${exe}`
 function run(label, args, env) {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-verify-'));
   const reportPath = path.join(userData, 'report.json');
+  const captures = path.join(userData, 'selftest-legacy-captures');
+  fs.mkdirSync(captures, { recursive: true });
+  const legacyPng = fs.readFileSync(path.join(root, 'assets', 'icon.png'));
+  const legacyId = 'verifylegacy01';
+  const asset = {
+    id: legacyId,
+    name: 'Legacy migration fixture',
+    mode: 'region',
+    width: legacyPng.readUInt32BE(16),
+    height: legacyPng.readUInt32BE(20),
+    createdAt: 1700000000000,
+  };
+  fs.writeFileSync(path.join(captures, `${legacyId}.png`), legacyPng);
+  fs.writeFileSync(path.join(captures, 'index.json'), JSON.stringify([asset], null, 1));
+  fs.writeFileSync(path.join(captures, 'keep-this-file.txt'), 'unindexed user file: keep unchanged');
+  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autoCopy: true, clipOnly: false, assetsDir: captures }));
+  fs.mkdirSync(path.join(userData, 'temp-exports'), { recursive: true });
+  fs.writeFileSync(path.join(userData, 'temp-exports', 'leftover.png'), legacyPng);
   console.log(`\n> ${label} 실행 중 …`);
   const r = spawnSync(exe, [`--user-data-dir=${userData}`, ...args], {
-    env: { ...process.env, CB_SELFTEST: reportPath, ...env },
+    env: { ...process.env, CB_SELFTEST: reportPath, CB_SELFTEST_SEED: '1', ...env },
     timeout: 8 * 60 * 1000,
   });
   let report = null;

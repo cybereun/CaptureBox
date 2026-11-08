@@ -4,10 +4,10 @@
 
 ## 1. 패키지 올리기
 1. 로컬 디스크(구글 드라이브 X)에서 `npm ci` → `npm run msix`
-2. 생성된 `dist-store/CaptureBox-Store-<버전>.appx` 를 Partner Center > 제출 > **패키지**에 올립니다.
+2. 생성된 `dist-store/CaptureBox-Store-1.5.2.appx` (또는 빌드 도구가 만든 `.msix`)를 Partner Center > 제출 > **패키지**에 올립니다.
    - `.appx`는 `.msix`와 같은 패키지 형식이며 Store가 둘 다 받습니다.
    - Store에 올리는 패키지는 **서명하지 않습니다**(Store가 서명). 그래서 내 PC에 직접 설치해 볼 수는 없습니다.
-3. 새 제출마다 `package.json`의 `version`을 올려야 합니다 (패키지 버전은 `1.5.1` → `1.5.1.0` 으로 만들어집니다. 마지막 자리는 Store 예약값이라 0이어야 합니다).
+3. 새 제출마다 `package.json`의 `version`을 올려야 합니다 (이 제출은 `1.5.2` → `1.5.2.0` 입니다. 마지막 자리는 Store 예약값이라 0이어야 합니다).
 
 ## 2. 제품 설명
 **짧은 설명 (100자 이내)**
@@ -40,13 +40,16 @@
 ■ 클립보드 · 인쇄
 '캡처 시 대시보드 열지 않음'으로 바로 붙여넣기. Ctrl+P 인쇄 미리보기에서 용지, 방향, 여백도 고를 수 있어요.
 
+■ 로컬 보관함 암호화
+앱이 관리하는 캡처, 미리보기, 색인과 설정은 AES-256-GCM으로 암호화해 저장합니다. 암호화 키와 캡처 폴더 정보는 Windows 계정에 묶인 DPAPI로 보호됩니다. Windows 사용자 프로필을 초기화하거나 키 파일을 삭제하기 전에 중요한 캡처를 이미지 파일로 내보내 두세요. 클립보드, 사용자가 저장한 PNG/JPEG, 인쇄 출력과 임시 드래그/탐색기용 PNG는 일반 파일입니다.
+
 ■ 개인정보
-계정도 광고도 없고, 캡처 이미지는 PC 밖으로 나가지 않아요. 앱이 직접 인터넷에 접속하지 않습니다.
+계정·광고·분석 기능이 없습니다. Store 버전은 캡처와 OCR을 PC 안에서 처리하며 앱 서버로 보내지 않습니다. Store 설치와 업데이트는 Microsoft Store가 처리합니다.
 ```
 
 **이 버전의 새로운 기능**
 ```
-첫 Microsoft Store 출시입니다.
+보관함의 캡처 이미지, 미리보기, 색인과 설정을 AES-256-GCM으로 암호화해 저장합니다. Windows 계정에 묶인 키를 사용합니다.
 ```
 
 **검색 키워드 (최대 7개)**
@@ -73,7 +76,7 @@ Full trust is required for: (1) capturing the screen via the Chromium desktop ca
 (3) for "scroll capture", injecting mouse-wheel events into the region the user selected, only while a scroll capture is running;
 (4) launching the bundled PowerShell scripts (input helper and a Windows OCR fallback) that ship inside the package;
 (5) saving screenshots to the folder the user chooses (default: Pictures\Screenshots).
-No personal data is collected or transmitted. The app makes no network connections in the Store build (auto-update is disabled; the Store handles updates).
+CaptureBox processes screenshots locally and does not collect or transmit captures, OCR text, or settings. The app-managed vault encrypts captures, thumbnails, its index, and settings with AES-256-GCM. The key and active folder pointer are protected by Windows DPAPI under the user's profile. Clipboard content, user-selected PNG/JPEG exports, printing, and temporary drag/reveal PNGs are ordinary decrypted output. The Store build does not initiate network connections for app features; Microsoft Store handles installation and updates.
 ```
 
 **테스트 방법 (인증 담당자용)**

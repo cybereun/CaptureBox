@@ -7,7 +7,9 @@
  * 구글 드라이브 같은 가상 드라이브가 아니라 로컬 디스크에서 실행하세요.
  */
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
@@ -26,8 +28,13 @@ for (const s of ['make-store-assets.js', 'fetch-models.js']) {
 
 // 2) 빌드 설정 = package.json 의 build 설정 + appx 설정 (자동 업데이트용 publish 설정은 뺀다)
 const out = path.join(root, 'dist-store');
-fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
+const expectedNames = [`CaptureBox-Store-${pkg.version}.appx`, `CaptureBox-Store-${pkg.version}.msix`];
+const existingVersioned = expectedNames.find((name) => fs.existsSync(path.join(out, name)));
+if (existingVersioned) {
+  console.error(`같은 버전 패키지가 이미 있습니다: ${path.join(out, existingVersioned)}. package.json 버전을 올려 기존 파일을 보존하세요.`);
+  process.exit(1);
+}
 const build = JSON.parse(JSON.stringify(pkg.build));
 delete build.publish;
 delete build.nsis;
@@ -46,14 +53,15 @@ build.appx = {
   showNameOnTiles: false,
   artifactName: 'CaptureBox-Store-${version}.${ext}',
 };
-const cfg = path.join(out, '_config.json');
-fs.writeFileSync(cfg, JSON.stringify(build, null, 2));
-
-console.log(`> MSIX(appx) 빌드 중 … ${id.identityName} v${pkg.version}`);
-const r = spawnSync('npx', ['electron-builder', '--win', 'appx', '--x64', '--publish', 'never', '--config', cfg], { cwd: root, stdio: 'inherit', shell: true });
-fs.rmSync(cfg, { force: true });
+const cfg = path.join(os.tmpdir(), `capturebox-msix-${crypto.randomUUID()}.json`);
+let r;
+try {
+  fs.writeFileSync(cfg, JSON.stringify(build, null, 2), { flag: 'wx' });
+  console.log(`> MSIX(appx) 빌드 중 … ${id.identityName} v${pkg.version}`);
+  r = spawnSync('npx', ['electron-builder', '--win', 'appx', '--x64', '--publish', 'never', '--config', cfg], { cwd: root, stdio: 'inherit', shell: true });
+} finally { fs.rmSync(cfg, { force: true }); }
 if (r.status !== 0) { console.error('빌드에 실패했습니다.'); process.exit(r.status || 1); }
-const made = fs.readdirSync(out).filter((f) => /\.(appx|msix)$/i.test(f));
+const made = fs.readdirSync(out).filter((f) => f.startsWith(`CaptureBox-Store-${pkg.version}.`) && /\.(appx|msix)$/i.test(f));
 if (!made.length) { console.error('패키지 파일이 만들어지지 않았습니다.'); process.exit(1); }
 for (const f of made) console.log(`✔ ${path.join('dist-store', f)}  (${(fs.statSync(path.join(out, f)).size / 1048576).toFixed(1)}MB)`);
 console.log('\nPartner Center > 제출 > 패키지 에서 위 파일을 올리세요. (제출 전에 store/listing-ko.md 의 내용을 확인하세요)');
