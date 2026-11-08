@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('snap', {
   chooseStore: () => ipcRenderer.invoke('store:choose'),
   resetStore: () => ipcRenderer.invoke('store:reset'),
   openStore: () => ipcRenderer.invoke('store:open'),
+  openNotices: () => ipcRenderer.invoke('notices:open'),
+  openPrivacyPolicy: () => ipcRenderer.invoke('privacy:open'),
   getHotkeys: () => ipcRenderer.invoke('hotkeys:get'),
   setHotkey: (mode, combo) => ipcRenderer.invoke('hotkeys:set', mode, combo),
   resetHotkeys: () => ipcRenderer.invoke('hotkeys:reset'),
