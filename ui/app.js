@@ -72,7 +72,9 @@ function renderList() {
       selectedId = a.id; renderList(); renderViewer();
     });
     el.addEventListener('dblclick', async () => {
-      if (selecting) return; await snap.copy(a.id); toast('클립보드에 복사했습니다'); });
+      if (selecting) return;
+      toast(await snap.copy(a.id) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
+    });
     el.addEventListener('dragstart', (e) => { e.preventDefault(); snap.drag(a.id); });
     list.append(el);
   }
@@ -206,7 +208,9 @@ $('canvas').addEventListener('wheel', (e) => {
   cv.scrollLeft = px * (next / cur) - (e.clientX - r.left);
   cv.scrollTop = py * (next / cur) - (e.clientY - r.top);
 }, { passive: false });
-$('copy').addEventListener('click', async () => { if (selectedId) { await snap.copy(selectedId); toast('클립보드에 복사했습니다'); } });
+$('copy').addEventListener('click', async () => {
+  if (selectedId) toast(await snap.copy(selectedId) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
+});
 $('save').addEventListener('click', async () => { if (selectedId && (await snap.save(selectedId))) toast('저장했습니다'); });
 $('reveal').addEventListener('click', () => selectedId && snap.reveal(selectedId));
 $('print').addEventListener('click', printCurrent);
@@ -240,8 +244,7 @@ window.addEventListener('keydown', async (e) => {
   if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); printCurrent(); }
   else if (e.key === 'Escape') $('picker').hidden = true;
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedId) {
-    await snap.copy(selectedId);
-    toast('클립보드에 복사했습니다');
+    toast(await snap.copy(selectedId) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
   }
 });
 
@@ -256,10 +259,54 @@ snap.onChanged(async (p) => {
   if (p.toast) toast(p.toast);
 });
 
+let storeUiInitialized = false;
+let storeUiLoading = false;
+let storeRetrying = false;
+function applyStoreStatus(status) {
+  const locked = !status || !status.ready;
+  $('storeLock').hidden = !locked;
+  $('storeLockError').textContent = status && status.error ? status.error : '';
+  $('storeRetry').disabled = storeUiLoading || storeRetrying;
+}
+async function initializeStoreUi() {
+  if (storeUiInitialized || storeUiLoading) return;
+  storeUiLoading = true;
+  $('storeRetry').disabled = true;
+  try {
+    const s = await snap.getSettings();
+    $('autoCopy').checked = !!s.autoCopy;
+    $('clipOnly').checked = !!s.clipOnly;
+    $('autoCopy').disabled = !!s.clipOnly;
+    await refresh();
+    storeUiInitialized = true;
+  } finally {
+    storeUiLoading = false;
+    $('storeRetry').disabled = false;
+  }
+}
+$('storeRetry').addEventListener('click', async () => {
+  storeRetrying = true;
+  $('storeRetry').disabled = true;
+  try {
+    const status = await snap.retryStore();
+    applyStoreStatus(status);
+    if (status.ready) await initializeStoreUi();
+  } catch (error) {
+    applyStoreStatus({ ready: false, error: error.message });
+  } finally {
+    storeRetrying = false;
+    $('storeRetry').disabled = false;
+  }
+});
+$('storeQuit').addEventListener('click', () => snap.quitStore());
+snap.onStoreStatus((status) => {
+  applyStoreStatus(status);
+  if (status.ready) initializeStoreUi().catch((error) => applyStoreStatus({ ready: false, error: error.message }));
+});
 (async () => {
-  const s = await snap.getSettings();
-  $('autoCopy').checked = !!s.autoCopy;
-  $('clipOnly').checked = !!s.clipOnly;
-  $('autoCopy').disabled = !!s.clipOnly;
-  await refresh();
+  try {
+    const status = await snap.getStore();
+    applyStoreStatus(status);
+    if (status.ready) await initializeStoreUi();
+  } catch (error) { applyStoreStatus({ ready: false, error: error.message }); }
 })();

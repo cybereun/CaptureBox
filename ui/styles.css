@@ -2,6 +2,13 @@
   --bg: #f4f5f8; --surface: #fff; --surface2: #eceef3; --text: #1b1f2a; --muted: #6b7280;
   --line: #dfe2ea; --accent: #2f6df0; --accent-text: #fff; --danger: #d6403a; --checker: #e6e8ee;
 }
+.store-lock { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
+.store-lock[hidden] { display: none; }
+.store-lock-card { width: min(560px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 18px 60px rgba(0,0,0,.25); }
+.store-lock-card h1 { margin: 0 0 12px; font-size: 22px; }
+.store-lock-card p { line-height: 1.6; }
+.store-lock-error { color: var(--danger); overflow-wrap: anywhere; }
+.store-lock-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #14171f; --surface: #1c202b; --surface2: #262b38; --text: #e8ebf2; --muted: #9099ab;

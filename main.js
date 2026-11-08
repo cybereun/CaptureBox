@@ -1,15 +1,39 @@
 'use strict';
 const {
-  app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard, nativeImage,
+  app, BrowserWindow, ipcMain, protocol, desktopCapturer, screen, clipboard, nativeImage, safeStorage,
   dialog, globalShortcut, shell, ClipboardItem, Tray, Menu,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { pathToFileURL } = require('url');
+const { isSamePhysicalPath, isPathWithin } = require('./store-paths');
 const { Stitcher } = require('./stitch');
+const { openVault } = require('./vault');
+const { migrateIndexedFiles, resolveCaptureDirectory, resolveFallbackDirectory, shouldMigrateIndexedFiles } = require('./store-migration');
+const { createAssetProtocolHandler } = require('./asset-protocol');
 
-if (!app.requestSingleInstanceLock()) app.quit();
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'capturebox-asset',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+}]);
+
+// safeStorage uses Electron's session Local State file, while the process lock follows userData.
+// Point both at one per-Windows-user directory before either facility initializes.
+const packageUserDataDir = app.getPath('userData');
+const sharedProfileDir = path.resolve(process.env.CB_SELFTEST_PROFILE_ROOT || path.join(
+  process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'), 'CaptureBox',
+));
+fs.mkdirSync(sharedProfileDir, { recursive: true });
+app.setPath('userData', sharedProfileDir);
+app.setPath('sessionData', sharedProfileDir);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (process.env.CB_SELFTEST_LOCK_PROBE === '1') {
+  if (hasSingleInstanceLock && process.env.CB_SELFTEST_LOCK_MARKER) {
+    fs.writeFileSync(process.env.CB_SELFTEST_LOCK_MARKER, 'another instance acquired the shared lock');
+  }
+  process.exit(hasSingleInstanceLock ? 42 : 0);
+} else if (!hasSingleInstanceLock) app.quit();
 
 const MODE_LABEL = { region: '영역', window: '창', fullscreen: '전체 화면', scroll: '스크롤', edit: '편집' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -18,83 +42,293 @@ let win = null;
 let busy = false;
 
 /* ---------- 저장소 (에셋 + 설정) ---------- */
-let assetsDir, indexFile, settingsFile;
+let assetsDir, indexFile, settingsFile, legacySettingsFile;
+let temporaryExportsDir = '';
+let vault = null;
 let assets = [];
 let settings = { autoCopy: true, clipOnly: false };
 
 let storeError = '';
-const defaultDir = () => path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
-const legacyDir = () => path.join(app.getPath('userData'), 'assets');         // v1.0.1 이하의 기본 위치
+let storeReady = false;
+let storeTransition = false;
+let storeInitialization = null;
+const defaultDir = () => process.env.CB_SELFTEST
+  ? path.join(packageUserDataDir, 'selftest-captures')
+  : path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
+const legacyDir = () => path.join(packageUserDataDir, 'assets');              // v1.0.1 이하의 기본 위치
 
-function initStore() {
-  settingsFile = path.join(app.getPath('userData'), 'settings.json');
-  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { /* 기본값 */ }
-  // 사용자가 지정한 폴더는 다시 바꾸기 전까지 유지한다. 쓸 수 없으면 이번 실행만 기본 위치를 쓰고 설정은 그대로 둔다.
-  assetsDir = defaultDir();
-  if (settings.assetsDir) {
-    try {
-      fs.mkdirSync(settings.assetsDir, { recursive: true });
-      fs.accessSync(settings.assetsDir, fs.constants.W_OK);
-      assetsDir = settings.assetsDir;
-    } catch { storeError = `지정한 폴더를 사용할 수 없어 임시로 기본 위치를 사용합니다: ${settings.assetsDir}`; }
+function parseSettings(bytes, label) {
+  let parsed;
+  try { parsed = JSON.parse(bytes.toString('utf8')); } catch (error) {
+    throw new Error(`${label} is malformed: ${error.message}`);
   }
-  // 예전 기본 위치에 보관함이 있으면 새 기본 위치로 옮긴다.
-  if (!settings.assetsDir && fs.existsSync(path.join(legacyDir(), 'index.json'))) {
-    const target = assetsDir;
-    assetsDir = legacyDir();
-    indexFile = path.join(assetsDir, 'index.json');
-    try { assets = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch { assets = []; }
-    assets = assets.filter((a) => fs.existsSync(imgPath(a.id)));
-    try { moveStore(target); } catch (e) { storeError = `기본 폴더로 옮기지 못했습니다: ${e.message}`; }
-    return;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${label} is invalid`);
+  if (Object.hasOwn(parsed, 'assetsDir') && (typeof parsed.assetsDir !== 'string' || !path.isAbsolute(parsed.assetsDir))) {
+    throw new Error(`${label} contains an invalid capture directory`);
   }
+  return parsed;
+}
+
+function hasEncryptedData(directory) {
+  if (typeof directory !== 'string' || !directory || !fs.existsSync(directory)) return false;
+  try { return fs.readdirSync(directory).some((name) => name.endsWith('.cbx')); } catch { return false; }
+}
+
+function parseAssetIndex(bytes, label) {
+  let parsed;
+  try { parsed = JSON.parse(bytes.toString('utf8')); } catch (error) {
+    throw new Error(`${label} is malformed: ${error.message}`);
+  }
+  if (!Array.isArray(parsed) || parsed.some((asset) => !asset || typeof asset !== 'object' || typeof asset.id !== 'string' || !/^[a-z0-9]{6,32}$/i.test(asset.id))) {
+    throw new Error(`${label} is invalid`);
+  }
+  if (new Set(parsed.map((asset) => asset.id)).size !== parsed.length) throw new Error(`${label} contains duplicate asset IDs`);
+  return parsed;
+}
+
+async function initStore() {
+  storeReady = false;
+  assets = [];
+  const userData = sharedProfileDir;
+  temporaryExportsDir = path.join(userData, 'temp-exports');
+  settingsFile = path.join(userData, 'settings.cbx');
+  legacySettingsFile = path.join(packageUserDataDir, 'settings.json');
+  const keyFile = path.join(userData, 'vault-key.bin');
+  const stateFile = path.join(userData, 'vault-state.bin');
+  const legacySettings = !fs.existsSync(settingsFile) && fs.existsSync(legacySettingsFile)
+    ? parseSettings(fs.readFileSync(legacySettingsFile), 'Legacy CaptureBox settings')
+    : null;
+  const candidates = [legacySettings && legacySettings.assetsDir, defaultDir(), legacyDir(), packageUserDataDir];
+  const keyMustExist = fs.existsSync(stateFile) || fs.existsSync(settingsFile) || candidates.some(hasEncryptedData);
+  vault = await openVault({ safeStorage, keyFile, stateFile, requireExistingKey: keyMustExist });
+
+  // Store and GitHub builds use one protected state and one encrypted settings file.
+  const sharedState = await vault.readState();
+  let storedSettings = null;
+  if (fs.existsSync(settingsFile)) storedSettings = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+  else if (legacySettings) storedSettings = legacySettings;
+  settings = { autoCopy: true, clipOnly: false, ...(storedSettings || {}) };
+
+  const selected = await resolveCaptureDirectory({
+    vault,
+    legacySettings: sharedState ? null : storedSettings,
+    fallbackDirectory: resolveFallbackDirectory({
+      legacyDirectory: legacyDir(),
+      defaultDirectory: defaultDir(),
+      legacyIndexExists: !sharedState && fs.existsSync(path.join(legacyDir(), 'index.json')),
+    }),
+  });
+  assetsDir = selected.directory;
+  if (isPathWithin(assetsDir, temporaryExportsDir)) {
+    throw new Error('The CaptureBox library cannot be inside its temporary export folder');
+  }
+  try {
+    const tempInfo = fs.lstatSync(temporaryExportsDir);
+    if (tempInfo.isSymbolicLink()) throw new Error('CaptureBox temporary export path must not be a symbolic link');
+    fs.rmSync(temporaryExportsDir, { recursive: true, force: true });
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error(`CaptureBox temporary exports could not be cleared: ${error.message}`);
+  }
+  fs.mkdirSync(temporaryExportsDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
-  indexFile = path.join(assetsDir, 'index.json');
-  try { assets = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch { assets = []; }
-  assets = assets.filter((a) => fs.existsSync(imgPath(a.id)));
+  fs.accessSync(assetsDir, fs.constants.W_OK);
+  indexFile = path.join(assetsDir, 'index.cbx');
+
+  const encryptedIndexExists = fs.existsSync(indexFile);
+  const legacyIndexPath = path.join(assetsDir, 'index.json');
+  const legacyIndexExists = fs.existsSync(legacyIndexPath);
+  if (encryptedIndexExists) {
+    try { assets = parseAssetIndex(vault.readFile(indexFile), 'Encrypted CaptureBox index'); }
+    catch (error) {
+      if (!legacyIndexExists) throw error;
+      assets = parseAssetIndex(fs.readFileSync(legacyIndexPath), 'Legacy CaptureBox index');
+    }
+  } else if (legacyIndexExists) {
+    assets = parseAssetIndex(fs.readFileSync(legacyIndexPath), 'Legacy CaptureBox index');
+  } else {
+    if (hasEncryptedData(assetsDir)) throw new Error('CaptureBox encrypted files exist but the asset index is missing');
+    assets = [];
+  }
+
+  const legacyIndexedFilesExist = assets.some((asset) => asset && typeof asset.id === 'string' && (
+    fs.existsSync(path.join(assetsDir, `${asset.id}.png`)) || fs.existsSync(path.join(assetsDir, `${asset.id}.thumb.png`))
+  ));
+  if (shouldMigrateIndexedFiles({ encryptedIndexExists, legacyIndexExists, legacyIndexedFilesExist })) {
+    await migrateIndexedFiles({ directory: assetsDir, assets, vault, makeThumbnail: makeThumbnailBytes });
+  }
+
+  if (!fs.existsSync(settingsFile)) {
+    vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(settings)));
+    const verified = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+    if (JSON.stringify(verified) !== JSON.stringify(settings)) throw new Error('Encrypted CaptureBox settings failed verification');
+  }
+  const settingsDirectoryBefore = settings.assetsDir;
+  if (assetsDir.toLowerCase() === defaultDir().toLowerCase()) delete settings.assetsDir;
+  else settings.assetsDir = assetsDir;
+  if (selected.source !== 'shared-state' || settingsDirectoryBefore !== settings.assetsDir) {
+    vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(settings)));
+    const verifiedSettings = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+    if (JSON.stringify(verifiedSettings) !== JSON.stringify(settings)) throw new Error('Encrypted CaptureBox settings failed verification');
+  }
+  if (fs.existsSync(legacySettingsFile)) fs.rmSync(legacySettingsFile, { force: true });
+  await vault.writeState(assetsDir);
+  storeError = '';
+  storeReady = true;
+  return storeInfo();
+}
+
+async function retryStore() {
+  if (storeInitialization) return storeInitialization;
+  storeInitialization = (async () => {
+    try {
+      await initStore();
+    } catch (error) {
+      storeReady = false;
+      assets = [];
+      storeError = String(error && error.message || error).split(/\r?\n/)[0].slice(0, 240);
+    }
+    return storeInfo();
+  })().finally(() => { storeInitialization = null; });
+  return storeInitialization;
 }
 
 /* 저장 폴더 변경: 기존 에셋을 새 폴더로 복사(성공 후 원본 삭제)하고, 새 폴더에 있던 에셋과 합친다. */
-function moveStore(newDir) {
+async function moveStore(newDir) {
+  assertStoreMutable();
+  if (storeTransition) throw new Error('CaptureBox storage is already being moved');
+  storeTransition = true;
+  try { return await performStoreMove(newDir); }
+  finally { storeTransition = false; }
+}
+
+async function performStoreMove(newDir) {
+  assertStoreReady();
+  if (busy) throw new Error('Wait for the current capture to finish before moving the CaptureBox folder');
   newDir = path.resolve(newDir);
-  if (newDir.toLowerCase() === path.resolve(assetsDir).toLowerCase()) return { ok: true };
+  if (isPathWithin(newDir, temporaryExportsDir)) throw new Error('Choose a folder outside the CaptureBox temporary export folder');
+  if (isSamePhysicalPath(newDir, assetsDir)) return { ok: true };
   fs.mkdirSync(newDir, { recursive: true });
-  const oldDir = assetsDir, oldAssets = assets;
+  if (isPathWithin(newDir, temporaryExportsDir)) throw new Error('Choose a folder outside the CaptureBox temporary export folder');
+  if (isSamePhysicalPath(newDir, assetsDir)) return { ok: true };
+  const oldDir = path.resolve(assetsDir), oldAssets = [...assets];
+  const destinationIndex = path.join(newDir, 'index.cbx');
+  const legacyDestinationIndex = path.join(newDir, 'index.json');
   let existing = [];
-  try { existing = JSON.parse(fs.readFileSync(path.join(newDir, 'index.json'), 'utf8')); } catch { /* 없음 */ }
-  const files = (id) => [`${id}.png`, `${id}.thumb.png`];
-  // 원본 이미지가 없는 항목은 건너뛰고, 썸네일이 없으면 이미지에서 다시 만든다.
-  const movable = oldAssets.filter((a) => fs.existsSync(path.join(oldDir, `${a.id}.png`)));
-  for (const a of movable) {
-    fs.copyFileSync(path.join(oldDir, `${a.id}.png`), path.join(newDir, `${a.id}.png`));
-    const t = path.join(oldDir, `${a.id}.thumb.png`);
-    if (fs.existsSync(t)) fs.copyFileSync(t, path.join(newDir, `${a.id}.thumb.png`));
-    else {
-      const img = nativeImage.createFromPath(path.join(oldDir, `${a.id}.png`));
-      fs.writeFileSync(path.join(newDir, `${a.id}.thumb.png`), (img.getSize().width > 360 ? img.resize({ width: 360, quality: 'good' }) : img).toPNG());
+  if (fs.existsSync(destinationIndex)) {
+    try { existing = parseAssetIndex(vault.readFile(destinationIndex), 'Destination CaptureBox index'); }
+    catch (error) {
+      if (!fs.existsSync(legacyDestinationIndex)) throw error;
+      existing = parseAssetIndex(fs.readFileSync(legacyDestinationIndex), 'Legacy destination CaptureBox index');
+    }
+  } else if (fs.existsSync(legacyDestinationIndex)) existing = parseAssetIndex(fs.readFileSync(legacyDestinationIndex), 'Legacy destination CaptureBox index');
+  else if (hasEncryptedData(newDir)) throw new Error('Encrypted files exist in the selected folder but its index is missing');
+
+  await migrateIndexedFiles({ directory: newDir, assets: existing, vault, makeThumbnail: makeThumbnailBytes });
+  const existingById = new Map(existing.map((asset) => [asset.id, asset]));
+  for (const asset of oldAssets) {
+    const imageBytes = readAsset(asset.id);
+    const existingAsset = existingById.get(asset.id);
+    if (existingAsset) {
+      const destinationBytes = vault.readFile(path.join(newDir, `${asset.id}.cbx`));
+      if (!destinationBytes.equals(imageBytes)) throw new Error(`Capture ID collision while moving ${asset.id}`);
+      continue;
+    }
+    vault.writeFileAtomic(path.join(newDir, `${asset.id}.cbx`), imageBytes);
+    if (!vault.readFile(path.join(newDir, `${asset.id}.cbx`)).equals(imageBytes)) throw new Error(`Image copy failed verification for ${asset.id}`);
+    const sourceThumb = path.join(oldDir, `${asset.id}.thumb.cbx`);
+    const thumbBytes = fs.existsSync(sourceThumb) ? vault.readFile(sourceThumb) : await makeThumbnailBytes(imageBytes);
+    vault.writeFileAtomic(path.join(newDir, `${asset.id}.thumb.cbx`), thumbBytes);
+    if (!vault.readFile(path.join(newDir, `${asset.id}.thumb.cbx`)).equals(thumbBytes)) throw new Error(`Thumbnail copy failed verification for ${asset.id}`);
+  }
+
+  const newAssets = [...oldAssets, ...existing.filter((asset) => !oldAssets.some((old) => old.id === asset.id))]
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const nextSettings = { ...settings };
+  if (newDir.toLowerCase() === defaultDir().toLowerCase()) delete nextSettings.assetsDir;
+  else nextSettings.assetsDir = newDir;
+  vault.writeFileAtomic(destinationIndex, Buffer.from(JSON.stringify(newAssets, null, 1)));
+  if (JSON.stringify(parseAssetIndex(vault.readFile(destinationIndex), 'Encrypted destination index')) !== JSON.stringify(newAssets)) {
+    throw new Error('Encrypted destination index failed verification');
+  }
+  vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(nextSettings)));
+  if (JSON.stringify(parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings')) !== JSON.stringify(nextSettings)) {
+    throw new Error('Encrypted CaptureBox settings failed verification');
+  }
+  await vault.writeState(newDir);
+  assetsDir = newDir;
+  indexFile = destinationIndex;
+  assets = newAssets;
+  settings = nextSettings;
+  for (const asset of oldAssets) {
+    for (const file of [path.join(oldDir, `${asset.id}.cbx`), path.join(oldDir, `${asset.id}.thumb.cbx`)]) {
+      try { vault.removeFile(file); } catch { /* destination is verified; clean up on a later move if needed */ }
     }
   }
-  const have = new Set(movable.map((a) => a.id));
-  assetsDir = newDir;
-  indexFile = path.join(newDir, 'index.json');
-  assets = [...movable, ...existing.filter((a) => !have.has(a.id))]
-    .filter((a) => fs.existsSync(imgPath(a.id))).sort((x, y) => y.createdAt - x.createdAt);
-  saveIndex();
-  for (const a of oldAssets) for (const f of files(a.id)) { try { fs.unlinkSync(path.join(oldDir, f)); } catch { /* 무시 */ } }
-  try { fs.unlinkSync(path.join(oldDir, 'index.json')); } catch { /* 무시 */ }
-  if (newDir.toLowerCase() === defaultDir().toLowerCase()) delete settings.assetsDir; else settings.assetsDir = newDir;
+  try { vault.removeFile(path.join(oldDir, 'index.cbx')); } catch { /* old encrypted index is no longer active */ }
   storeError = '';
-  saveSettings();
   return { ok: true };
 }
-const storeInfo = () => ({ dir: assetsDir, isDefault: assetsDir.toLowerCase() === defaultDir().toLowerCase(), error: storeError, count: assets.length });
-const imgPath = (id) => path.join(assetsDir, `${id}.png`);
-const thumbPath = (id) => path.join(assetsDir, `${id}.thumb.png`);
-const saveIndex = () => fs.writeFileSync(indexFile, JSON.stringify(assets, null, 1));
-const saveSettings = () => fs.writeFileSync(settingsFile, JSON.stringify(settings));
 
-const view = (a) => ({ ...a, url: pathToFileURL(imgPath(a.id)).href, thumbUrl: pathToFileURL(thumbPath(a.id)).href });
-const findAsset = (id) => assets.find((a) => a.id === id);
+async function makeThumbnailBytes(bytes) {
+  const image = nativeImage.createFromBuffer(bytes);
+  if (image.isEmpty()) throw new Error('CaptureBox thumbnail source image is invalid');
+  return (image.getSize().width > 360 ? image.resize({ width: 360, quality: 'good' }) : image).toPNG();
+}
+
+function writeTemporaryExport(id) {
+  assertStoreReady();
+  if (!/^[a-z0-9]{6,32}$/i.test(id)) throw new Error('Invalid CaptureBox asset ID');
+  fs.mkdirSync(temporaryExportsDir, { recursive: true });
+  const filePath = path.join(temporaryExportsDir, `${id}-${crypto.randomUUID()}.png`);
+  fs.writeFileSync(filePath, readAsset(id), { flag: 'wx', mode: 0o600 });
+  return filePath;
+}
+
+function clearTemporaryExports() {
+  if (!temporaryExportsDir) return;
+  try { fs.rmSync(temporaryExportsDir, { recursive: true, force: true }); } catch { /* retry at next launch */ }
+}
+const storeInfo = () => ({ ready: storeReady, dir: assetsDir || '', isDefault: !!assetsDir && assetsDir.toLowerCase() === defaultDir().toLowerCase(), error: storeError, count: assets.length });
+const assertStoreReady = () => { if (!storeReady || !vault) throw new Error(storeError || 'CaptureBox 보관함을 먼저 복구해야 합니다'); };
+const assertStoreMutable = () => {
+  assertStoreReady();
+  if (storeTransition) throw new Error('CaptureBox 보관함 폴더를 옮기는 중입니다. 잠시 후 다시 시도해 주세요.');
+};
+const imgPath = (id) => path.join(assetsDir, `${id}.cbx`);
+const thumbPath = (id) => path.join(assetsDir, `${id}.thumb.cbx`);
+const readAsset = (id) => { assertStoreReady(); return vault.readFile(imgPath(id)); };
+const readThumbnail = (id) => { assertStoreReady(); return vault.readFile(thumbPath(id)); };
+const saveIndex = () => {
+  assertStoreMutable();
+  const bytes = Buffer.from(JSON.stringify(assets, null, 1));
+  vault.writeFileAtomic(indexFile, bytes);
+  if (!vault.readFile(indexFile).equals(bytes)) throw new Error('Encrypted CaptureBox index failed verification');
+};
+const saveSettings = () => {
+  assertStoreMutable();
+  const bytes = Buffer.from(JSON.stringify(settings));
+  vault.writeFileAtomic(settingsFile, bytes);
+  if (!vault.readFile(settingsFile).equals(bytes)) throw new Error('Encrypted CaptureBox settings failed verification');
+};
+function assetExportBytes(id, format) {
+  const imageBytes = readAsset(id);
+  if (format === 'png') return imageBytes;
+  if (format === 'jpg' || format === 'jpeg') {
+    const image = nativeImage.createFromBuffer(imageBytes);
+    if (image.isEmpty()) throw new Error('이미지를 읽을 수 없습니다');
+    return image.toJPEG(92);
+  }
+  throw new Error('지원하지 않는 이미지 형식입니다');
+}
+
+const view = (a) => ({ ...a, url: `capturebox-asset://asset/${encodeURIComponent(a.id)}?kind=image`, thumbUrl: `capturebox-asset://asset/${encodeURIComponent(a.id)}?kind=thumb` });
+const findAsset = (id) => typeof id === 'string' && /^[a-z0-9]{6,32}$/i.test(id) ? assets.find((a) => a.id === id) : undefined;
+function reportAssetError(id, error) {
+  const asset = findAsset(id);
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('assets:changed', { toast: `${asset ? asset.name : '캡처'} 이미지를 사용할 수 없습니다: ${error.message}` });
+  }
+}
 
 function stamp() {
   const d = new Date();
@@ -103,15 +337,22 @@ function stamp() {
 }
 
 function addAsset(img, mode) {
+  assertStoreMutable();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const { width, height } = img.getSize();
-  fs.writeFileSync(imgPath(id), img.toPNG());
-  const thumb = width > 360 ? img.resize({ width: 360, quality: 'good' }) : img;
-  fs.writeFileSync(thumbPath(id), thumb.toPNG());
-  const asset = { id, name: `${MODE_LABEL[mode]} ${stamp()}`, mode, width, height, createdAt: Date.now() };
-  assets.unshift(asset);
-  saveIndex();
-  return asset;
+  try {
+    vault.writeFileAtomic(imgPath(id), img.toPNG());
+    const thumb = width > 360 ? img.resize({ width: 360, quality: 'good' }) : img;
+    vault.writeFileAtomic(thumbPath(id), thumb.toPNG());
+    const asset = { id, name: `${MODE_LABEL[mode]} ${stamp()}`, mode, width, height, createdAt: Date.now() };
+    assets.unshift(asset);
+    try { saveIndex(); } catch (error) { assets.shift(); throw error; }
+    return asset;
+  } catch (error) {
+    vault.removeFile(imgPath(id));
+    vault.removeFile(thumbPath(id));
+    throw error;
+  }
 }
 
 /* ---------- 클립보드 (Electron 44+는 비동기 ClipboardItem API) ---------- */
@@ -355,6 +596,14 @@ async function finish(img, mode) {
 }
 
 async function runCapture(mode, delay = 0) {
+  if (storeTransition) {
+    if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: '보관함 폴더를 옮기는 중입니다. 잠시 후 다시 시도해 주세요.' });
+    return false;
+  }
+  if (!storeReady) {
+    if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: storeError || '보관함을 먼저 복구해 주세요' });
+    return false;
+  }
   if (busy) return;
   busy = true;
   let done = false;
@@ -384,10 +633,16 @@ async function runCapture(mode, delay = 0) {
 }
 
 /* ---------- IPC ---------- */
-ipcMain.handle('assets:list', () => assets.map(view));
+ipcMain.handle('assets:list', () => storeReady ? assets.map(view) : []);
 ipcMain.handle('settings:get', () => settings);
-ipcMain.handle('settings:set', (_e, patch) => { settings = { ...settings, ...patch }; saveSettings(); return settings; });
-ipcMain.handle('capture:start', (_e, mode, delay) => { runCapture(mode, Number(delay) || 0); });
+ipcMain.handle('settings:set', (_e, patch) => {
+  assertStoreMutable();
+  const previous = settings;
+  settings = { ...settings, ...patch };
+  try { saveSettings(); } catch (error) { settings = previous; throw error; }
+  return settings;
+});
+ipcMain.handle('capture:start', (_e, mode, delay) => { assertStoreMutable(); return runCapture(mode, Number(delay) || 0); });
 
 ipcMain.handle('windows:list', async () => {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 420, height: 280 } });
@@ -397,6 +652,7 @@ ipcMain.handle('windows:list', async () => {
 });
 
 ipcMain.handle('capture:window', async (_e, id) => {
+  assertStoreMutable();
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 3840, height: 2160 } });
   const s = srcs.find((x) => x.id === id);
   if (!s || s.thumbnail.isEmpty()) return { ok: false, message: '창을 캡처할 수 없습니다 (최소화된 창일 수 있어요)' };
@@ -407,56 +663,67 @@ ipcMain.handle('capture:window', async (_e, id) => {
 });
 
 ipcMain.handle('asset:rename', (_e, id, name) => {
+  assertStoreMutable();
   const a = findAsset(id);
-  if (a && name.trim()) { a.name = name.trim().slice(0, 120); saveIndex(); }
+  if (a && typeof name === 'string' && name.trim()) {
+    const previous = a.name;
+    a.name = name.trim().slice(0, 120);
+    try { saveIndex(); } catch (error) { a.name = previous; throw error; }
+  }
 });
 ipcMain.handle('asset:delete', (_e, id) => {
+  assertStoreMutable();
   const i = assets.findIndex((a) => a.id === id);
   if (i < 0) return;
-  assets.splice(i, 1);
-  for (const f of [imgPath(id), thumbPath(id)]) fs.rm(f, { force: true }, () => {});
-  saveIndex();
+  const [removed] = assets.splice(i, 1);
+  try { saveIndex(); } catch (error) { assets.splice(i, 0, removed); throw error; }
+  for (const f of [imgPath(id), thumbPath(id)]) vault.removeFile(f);
 });
 ipcMain.handle('assets:deleteMany', (_e, ids) => {
+  assertStoreMutable();
   const set = new Set(Array.isArray(ids) ? ids : []);
   const gone = assets.filter((a) => set.has(a.id));
   if (!gone.length) return 0;
+  const previous = assets;
   assets = assets.filter((a) => !set.has(a.id));
-  for (const a of gone) for (const f of [imgPath(a.id), thumbPath(a.id)]) fs.rm(f, { force: true }, () => {});
-  saveIndex();
+  try { saveIndex(); } catch (error) { assets = previous; throw error; }
+  for (const a of gone) for (const f of [imgPath(a.id), thumbPath(a.id)]) vault.removeFile(f);
   return gone.length;
 });
 ipcMain.handle('asset:copy', async (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return;
-  await copyImage(nativeImage.createFromPath(imgPath(id)));
+  try { await copyImage(nativeImage.createFromBuffer(readAsset(id))); return true; }
+  catch (error) { reportAssetError(id, error); return false; }
 });
 ipcMain.handle('asset:save', async (_e, id) => {
+  assertStoreReady();
   const a = findAsset(id);
   if (!a) return false;
-  const r = await dialog.showSaveDialog(win, {
-    // 이름 속 점(시각 22.11.12 등)은 윈도우가 확장자로 착각해 .png/.jpg 가 붙지 않을 수 있으므로 쓰지 않는다.
-    defaultPath: a.name.replace(/[\\/:*?"<>|.]/g, '-') + '.png',
-    filters: [{ name: 'PNG', extensions: ['png'] }, { name: 'JPEG', extensions: ['jpg', 'jpeg'] }],
-  });
-  if (r.canceled || !r.filePath) return false;
-  // 확장자가 png/jpg 가 아니면 열 수 없는 파일이 되므로 .png 를 붙인다.
-  let out = r.filePath;
-  if (!/\.(png|jpe?g)$/i.test(out)) out += '.png';
-  const src = fs.readFileSync(imgPath(id));
-  if (/\.jpe?g$/i.test(out)) {
-    const img = nativeImage.createFromBuffer(src);
-    if (img.isEmpty()) throw new Error('이미지를 읽을 수 없습니다');
-    fs.writeFileSync(out, img.toJPEG(92));
-  } else {
-    fs.writeFileSync(out, src);   // 보관본이 이미 PNG 이므로 다시 인코딩하지 않고 그대로 저장
+  try {
+    const r = await dialog.showSaveDialog(win, {
+      // 이름 속 점(시각 22.11.12 등)은 윈도우가 확장자로 착각해 .png/.jpg 가 붙지 않을 수 있으므로 쓰지 않는다.
+      defaultPath: a.name.replace(/[\\/:*?"<>|.]/g, '-') + '.png',
+      filters: [{ name: 'PNG', extensions: ['png'] }, { name: 'JPEG', extensions: ['jpg', 'jpeg'] }],
+    });
+    if (r.canceled || !r.filePath) return false;
+    let out = r.filePath;
+    if (!/\.(png|jpe?g)$/i.test(out)) out += '.png';
+    fs.writeFileSync(out, /\.jpe?g$/i.test(out) ? assetExportBytes(id, 'jpeg') : assetExportBytes(id, 'png'));
+    return true;
+  } catch (error) {
+    reportAssetError(id, error);
+    return false;
   }
-  return true;
 });
 ipcMain.handle('asset:dataUrl', (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return null;
-  return 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64');
+  try { return 'data:image/png;base64,' + readAsset(id).toString('base64'); }
+  catch (error) { reportAssetError(id, error); return null; }
 });
 ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
+  assertStoreMutable();
   const img = nativeImage.createFromDataURL(dataUrl);
   if (img.isEmpty()) return null;
   const base = findAsset(baseId);
@@ -465,20 +732,32 @@ ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
   return a.id;
 });
 ipcMain.handle('asset:print', (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return { ok: false };
-  const { pathToFileURL } = require('url');
   const w = new BrowserWindow({
     width: 1000, height: 820, minWidth: 600, minHeight: 500, title: '인쇄 미리보기',
     parent: win || undefined, autoHideMenuBar: true, icon: path.join(__dirname, 'ui', 'icon.png'),
     webPreferences: { sandbox: true, contextIsolation: true },
   });
-  w.loadFile(path.join(__dirname, 'ui', 'print.html'), { query: { src: pathToFileURL(imgPath(id)).href } });
+  w.loadFile(path.join(__dirname, 'ui', 'print.html'), { query: { src: `capturebox-asset://asset/${encodeURIComponent(id)}?kind=image` } });
   return { ok: true, preview: true };
 });
-ipcMain.handle('asset:reveal', (_e, id) => { if (findAsset(id)) shell.showItemInFolder(imgPath(id)); });
+ipcMain.handle('asset:reveal', (_e, id) => {
+  assertStoreReady();
+  if (!findAsset(id)) return false;
+  try { shell.showItemInFolder(writeTemporaryExport(id)); return true; }
+  catch (error) { reportAssetError(id, error); return false; }
+});
 ipcMain.on('asset:drag', (e, id) => {
-  if (!findAsset(id)) return;
-  e.sender.startDrag({ file: imgPath(id), icon: nativeImage.createFromPath(thumbPath(id)).resize({ width: 96 }) });
+  try {
+    assertStoreReady();
+    if (!findAsset(id)) return;
+    const filePath = writeTemporaryExport(id);
+    const thumbnail = nativeImage.createFromBuffer(readThumbnail(id));
+    e.sender.startDrag({ file: filePath, icon: thumbnail.resize({ width: 96 }) });
+  } catch (error) {
+    if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: `파일을 끌어 놓을 수 없습니다: ${error.message}` });
+  }
 });
 
 /* ---------- 자동 업데이트 (GitHub Releases, 설치본에서만 동작) ---------- */
@@ -530,19 +809,31 @@ function initUpdater() {
   if (win) win.on('focus', () => { if (Date.now() - lastCheck > 60 * 1000) checkUpdate(); });
 }
 ipcMain.handle('store:get', () => storeInfo());
+ipcMain.handle('store:retry', async () => {
+  const status = await retryStore();
+  if (status.ready) {
+    registerHotkeys();
+    buildTrayMenu();
+  }
+  if (win && !win.isDestroyed()) win.webContents.send('store:status', status);
+  return status;
+});
+ipcMain.handle('store:quit', () => { quitting = true; app.quit(); });
 ipcMain.handle('store:choose', async () => {
+  assertStoreMutable();
   const r = await dialog.showOpenDialog(win, { title: '저장할 폴더 선택', defaultPath: assetsDir, properties: ['openDirectory', 'createDirectory'] });
   if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true, ...storeInfo() };
-  try { moveStore(r.filePaths[0]); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
+  try { await moveStore(r.filePaths[0]); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
   win.webContents.send('assets:changed', {});
   return { ok: true, ...storeInfo() };
 });
-ipcMain.handle('store:reset', () => {
-  try { moveStore(defaultDir()); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
+ipcMain.handle('store:reset', async () => {
+  assertStoreMutable();
+  try { await moveStore(defaultDir()); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
   win.webContents.send('assets:changed', {});
   return { ok: true, ...storeInfo() };
 });
-ipcMain.handle('store:open', () => shell.openPath(assetsDir));
+ipcMain.handle('store:open', () => { assertStoreReady(); return shell.openPath(assetsDir); });
 ipcMain.handle('update:get', () => upd);
 ipcMain.handle('update:check', () => checkUpdate());
 ipcMain.handle('update:install', () => { if (updater && upd.state === 'ready') updater.quitAndInstall(true, true); });
@@ -571,7 +862,7 @@ async function ocrWindows(img) {
   let { width, height } = src.getSize();
   if (width > 9000) { src = src.resize({ width: 9000 }); ({ width, height } = src.getSize()); }
   if (Math.max(width, height) < 600) { src = src.resize({ width: width * 2, height: height * 2, quality: 'best' }); ({ width, height } = src.getSize()); }
-  const tmp = fs.mkdtempSync(path.join(app.getPath('temp'), 'capturebox-ocr-'));
+  const tmp = fs.mkdtempSync(path.join(temporaryExportsDir, 'ocr-'));
   try {
     const CH = 3500;
     const files = [];
@@ -660,9 +951,10 @@ async function ocrImage(img, mode) {
   return { text: await ocrWindows(img), engine: 'windows', note: '' };
 }
 ipcMain.handle('asset:ocr', async (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return { ok: false, message: '이미지를 찾을 수 없습니다' };
   try {
-    const r = await ocrImage(nativeImage.createFromPath(imgPath(id)));
+    const r = await ocrImage(nativeImage.createFromBuffer(readAsset(id)));
     if (!r.text) return { ok: true, text: '', engine: r.engine, message: '인식된 글자가 없습니다' };
     clipboard.writeText(r.text);
     return { ok: true, text: r.text, engine: r.engine, note: r.note };
@@ -670,6 +962,7 @@ ipcMain.handle('asset:ocr', async (_e, id) => {
 });
 ipcMain.handle('ocr:get', () => ({ mode: settings.ocrMode || 'precise', preciseAvailable: preciseStatus() }));
 ipcMain.handle('ocr:set', (_e, mode) => {
+  assertStoreMutable();
   settings.ocrMode = mode === 'windows' ? 'windows' : 'precise';
   saveSettings();
   return { mode: settings.ocrMode, preciseAvailable: preciseStatus() };
@@ -681,6 +974,7 @@ const pins = new Set();
 const pinAnchor = new Map();
 const pinSizes = new Map();   // 핀마다 "의도한" 크기. getBounds() 는 배율 환산 반올림으로 ±1px 달라질 수 있어 기준으로 쓰지 않는다
 function createPin(id) {
+  assertStoreReady();
   const a = findAsset(id);
   if (!a) return null;
   const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -706,7 +1000,8 @@ function createPin(id) {
   pw.on('closed', () => { pins.delete(pw); pinAnchor.delete(wid); pinSizes.delete(wid); });
   pw.loadFile(path.join(__dirname, 'ui', 'pin.html'));
   pw.webContents.once('did-finish-load', () => {
-    pw.webContents.send('pin:init', 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64'));
+    try { pw.webContents.send('pin:init', 'data:image/png;base64,' + readAsset(id).toString('base64')); }
+    catch (error) { reportAssetError(id, error); if (!pw.isDestroyed()) pw.close(); }
   });
   return pw;
 }
@@ -766,6 +1061,7 @@ function registerHotkeys() {
 const hotkeyState = () => ({ keys: Object.fromEntries(Object.keys(DEFAULT_KEYS).map((m) => [m, prettyKey(hotkeyOf(m))])), errors: hotkeyErrors });
 ipcMain.handle('hotkeys:get', () => hotkeyState());
 ipcMain.handle('hotkeys:set', (_e, mode, combo) => {
+  assertStoreMutable();
   if (!DEFAULT_KEYS[mode]) return { ok: false, message: '알 수 없는 항목입니다', ...hotkeyState() };
   if (!KEY_RE.test(String(combo))) return { ok: false, message: 'Ctrl, Alt, Shift 중 하나 이상과 일반 키를 함께 눌러 주세요', ...hotkeyState() };
   const accel = String(combo).replace(/^Ctrl/, 'CommandOrControl').replace(/\+Ctrl\b/, '+CommandOrControl');
@@ -786,6 +1082,7 @@ ipcMain.handle('hotkeys:set', (_e, mode, combo) => {
   return { ok: true, ...hotkeyState() };
 });
 ipcMain.handle('hotkeys:reset', () => {
+  assertStoreMutable();
   delete settings.hotkeys;
   saveSettings();
   registerHotkeys();
@@ -852,11 +1149,14 @@ function createWindow() {
   win.on('page-title-updated', (e) => e.preventDefault());   // 제목줄에 버전을 계속 표시
   win.on('close', (e) => {
     if (quitting || !tray) return;
+    if (!storeReady) { e.preventDefault(); quitting = true; app.quit(); return; }
     e.preventDefault();
     win.hide();
     if (!settings.trayNoticeShown) {
-      settings.trayNoticeShown = true;
-      saveSettings();
+      if (!storeTransition) {
+        settings.trayNoticeShown = true;
+        saveSettings();
+      }
       try { tray.displayBalloon({ title: 'CaptureBox', content: '트레이에서 계속 실행 중입니다. 단축키로 바로 캡처할 수 있어요. 완전히 종료하려면 트레이 아이콘을 우클릭하세요.' }); } catch { /* 무시 */ }
     }
   });
@@ -864,8 +1164,16 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
 }
 
-app.whenReady().then(() => {
-  initStore();
+app.whenReady().then(async () => {
+  protocol.handle('capturebox-asset', createAssetProtocolHandler({
+    getDirectory: () => assetsDir,
+    getAssets: () => assets,
+    vault: { readFile: (filePath) => { assertStoreReady(); return vault.readFile(filePath); } },
+    onError: (id, error) => {
+      reportAssetError(id, error);
+    },
+  }));
+  await retryStore();
   createWindow();
   createTray();
   initUpdater();
@@ -874,13 +1182,17 @@ app.whenReady().then(() => {
   // 설치본 자체 검증 모드: CB_SELFTEST=<리포트 경로> 로 실행하면 핵심 기능을 실제로 돌려 보고서를 쓴다 (npm run verify)
   if (process.env.CB_SELFTEST) {
     setTimeout(() => require('./selftest').run({
-      app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path,
+      app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, clipboard, fs, path,
+      packageUserDataDir, sharedProfileDir,
       get win() { return win; }, get tray() { return tray; }, get assets() { return assets; },
+      get assetsDir() { return assetsDir; }, get indexFile() { return indexFile; }, get settingsFile() { return settingsFile; },
+      get temporaryExportsDir() { return temporaryExportsDir; }, get vault() { return vault; },
+      readAsset, assetExportBytes, writeTemporaryExport, clearTemporaryExports, storeInfo, moveStore,
       isStore, pins, overlayCtx, startInput, scrollCapture, grabDisplay, ocrImage, getPrecise, ocrModelDir, resetPrecise: () => { preciseEngine = null; }, createPin, runCapture, addAsset, startHidden, unpackedPath,
     }), 2000);
   }
 });
 app.on('second-instance', showWin);
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => { globalShortcut.unregisterAll(); clearTemporaryExports(); });
 app.on('window-all-closed', () => { if (!tray && !busy) app.quit(); });
