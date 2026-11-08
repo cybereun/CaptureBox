@@ -61,6 +61,8 @@
 | 웹사이트 | https://cybereun.github.io/CaptureBox/ |
 | 지원 연락처 | https://github.com/cybereun/CaptureBox/issues |
 
+Partner Center에서 개인정보 접근 여부가 저장 후 `예`로 되돌아가면 패키지가 개인정보에 접근할 수 있는 기능을 선언했기 때문일 수 있습니다. Microsoft는 이런 패키지를 감지하면 `예`로 표시하고 개인정보처리방침을 요구할 수 있습니다. 개인정보처리방침 URL로 `https://cybereun.github.io/CaptureBox/privacy.html`을 입력하거나, 직접 텍스트 입력을 선택한 경우 `store/privacy-policy-ko.txt`의 내용을 사용하세요. 정책 문서는 캡처 화면과 OCR 결과에 개인정보가 포함될 수 있으나 Store 앱은 이를 로컬에서 처리한다는 점을 설명합니다.
+
 ## 4. 인증용 메모 (Partner Center > 제출 > 인증 메모, 그리고 `runFullTrust` 사유)
 Electron 앱은 `runFullTrust` 제한 기능이 필요합니다. 사유 입력란에 아래를 붙여 넣으세요.
 

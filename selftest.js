@@ -19,10 +19,13 @@ function analyzeStitch(img, sf) {
     if (dark && !prev) starts.push(y);
     prev = dark;
   }
-  const gaps = starts.slice(1).map((v, i) => v - starts[i]);
+  // A frameless test window can add a dark top-edge pixel at x=5. It is not a row border.
+  const measuredStarts = starts[0] === 0 ? starts.slice(1) : starts;
+  const gapDetails = measuredStarts.slice(1).map((v, i) => ({ from: measuredStarts[i], to: v, gap: v - measuredStarts[i] }));
+  const gaps = gapDetails.map((g) => g.gap);
   const expected = Math.round(102 * sf);
-  const bad = gaps.filter((g) => Math.abs(g - expected) > 2);
-  return { width, height, borders: starts.length, expectedGap: expected, badGaps: bad.length, gaps: [...new Set(gaps)] };
+  const bad = gapDetails.filter((g) => Math.abs(g.gap - expected) > 2);
+  return { width, height, borders: measuredStarts.length, expectedGap: expected, ignoredTopEdgeLine: starts.length !== measuredStarts.length, badGaps: bad, gaps: [...new Set(gaps)] };
 }
 
 const mean = (img) => {
@@ -57,12 +60,13 @@ exports.run = async (ctx) => {
   await step('패키징 확인 (app.asar / 업데이트 설정)', () => {
     if (!app.isPackaged) return { status: 'warn', detail: '개발 모드: 설치본이 아닙니다' };
     const upd = path.join(process.resourcesPath, 'app-update.yml');
-    if (!fs.existsSync(upd)) throw new Error('app-update.yml 없음 (자동 업데이트 설정 누락)');
+    if (ctx.isStore && fs.existsSync(upd)) throw new Error('Store 패키지에 자체 업데이트 설정이 포함되어 있습니다');
+    if (!ctx.isStore && !fs.existsSync(upd)) throw new Error('app-update.yml 없음 (자동 업데이트 설정 누락)');
     if (!fs.existsSync(ctx.unpackedPath('input.ps1')) || !fs.existsSync(ctx.unpackedPath('ocr.ps1'))) throw new Error('app.asar.unpacked 에 PowerShell 스크립트가 없습니다');
     const bind = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'win32', 'x64', 'onnxruntime_binding.node');
     if (!fs.existsSync(bind)) throw new Error('onnxruntime-node 네이티브 모듈이 unpacked 에 없습니다 (정밀 OCR 불가)');
     for (const f of ['det.onnx', 'rec_korean.onnx', 'rec_korean.yml']) if (!fs.existsSync(path.join(ctx.ocrModelDir(), f))) throw new Error(`OCR 모델 파일 없음: ${f}`);
-    return 'app-update.yml · 스크립트·onnxruntime unpacked · OCR 모델 3개 OK';
+    return `${ctx.isStore ? 'Store 자동 업데이트 꺼짐' : 'app-update.yml'} · 스크립트·onnxruntime unpacked · OCR 모델 3개 OK`;
   });
 
   if (process.env.CB_FORCE_STORE === '1') {
@@ -140,8 +144,8 @@ exports.run = async (ctx) => {
           const a = analyzeStitch(img, sf);
           const trace = ` · 진행기록: ${log.join(' | ')}`;
           if (a.borders < 38) throw new Error(`행 경계 ${a.borders}개만 인식됨 (기대 ≥38) · ${JSON.stringify(a)}${trace}`);
-          if (a.badGaps > 0) throw new Error(`이어붙임이 어긋난 곳 ${a.badGaps}개 · 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})${trace}`);
-          return `${a.width}x${a.height}px, 행 ${a.borders}개, 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})`;
+          if (a.badGaps.length > 0) throw new Error(`이어붙임이 어긋난 곳 ${a.badGaps.length}개 · 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap}) · 위치 ${JSON.stringify(a.badGaps)}${trace}`);
+          return `${a.width}x${a.height}px, 행 ${a.borders}개, 간격 ${a.gaps.join(',')} (기대 ${a.expectedGap})${a.ignoredTopEdgeLine ? ' · 상단 창 경계선 제외' : ''}`;
         } finally { if (!tw.isDestroyed()) tw.destroy(); }
       });
     }
@@ -403,13 +407,15 @@ exports.run = async (ctx) => {
       return 'OK';
     });
 
-    await step('윈도우 시작 시 자동 실행 켜기/끄기', async () => {
-      if (!app.isPackaged) return { status: 'warn', detail: '개발 모드에서는 건너뜀' };
-      const on = await H('login:set', true);
-      const off = await H('login:set', false);
-      if (!on.enabled || off.enabled) throw new Error(`켜기=${on.enabled}, 끄기=${off.enabled}`);
-      return 'OK (레지스트리 원복됨)';
-    });
+    if (!ctx.isStore) {
+      await step('윈도우 시작 시 자동 실행 켜기/끄기', async () => {
+        if (!app.isPackaged) return { status: 'warn', detail: '개발 모드에서는 건너뜀' };
+        const on = await H('login:set', true);
+        const off = await H('login:set', false);
+        if (!on.enabled || off.enabled) throw new Error(`켜기=${on.enabled}, 끄기=${off.enabled}`);
+        return 'OK (레지스트리 원복됨)';
+      });
+    }
   }
 
   const failed = results.filter((r) => r.status === 'fail').length;
