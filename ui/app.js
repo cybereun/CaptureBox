@@ -256,10 +256,54 @@ snap.onChanged(async (p) => {
   if (p.toast) toast(p.toast);
 });
 
+let storeUiInitialized = false;
+let storeUiLoading = false;
+let storeRetrying = false;
+function applyStoreStatus(status) {
+  const locked = !status || !status.ready;
+  $('storeLock').hidden = !locked;
+  $('storeLockError').textContent = status && status.error ? status.error : '';
+  $('storeRetry').disabled = storeUiLoading || storeRetrying;
+}
+async function initializeStoreUi() {
+  if (storeUiInitialized || storeUiLoading) return;
+  storeUiLoading = true;
+  $('storeRetry').disabled = true;
+  try {
+    const s = await snap.getSettings();
+    $('autoCopy').checked = !!s.autoCopy;
+    $('clipOnly').checked = !!s.clipOnly;
+    $('autoCopy').disabled = !!s.clipOnly;
+    await refresh();
+    storeUiInitialized = true;
+  } finally {
+    storeUiLoading = false;
+    $('storeRetry').disabled = false;
+  }
+}
+$('storeRetry').addEventListener('click', async () => {
+  storeRetrying = true;
+  $('storeRetry').disabled = true;
+  try {
+    const status = await snap.retryStore();
+    applyStoreStatus(status);
+    if (status.ready) await initializeStoreUi();
+  } catch (error) {
+    applyStoreStatus({ ready: false, error: error.message });
+  } finally {
+    storeRetrying = false;
+    $('storeRetry').disabled = false;
+  }
+});
+$('storeQuit').addEventListener('click', () => snap.quitStore());
+snap.onStoreStatus((status) => {
+  applyStoreStatus(status);
+  if (status.ready) initializeStoreUi().catch((error) => applyStoreStatus({ ready: false, error: error.message }));
+});
 (async () => {
-  const s = await snap.getSettings();
-  $('autoCopy').checked = !!s.autoCopy;
-  $('clipOnly').checked = !!s.clipOnly;
-  $('autoCopy').disabled = !!s.clipOnly;
-  await refresh();
+  try {
+    const status = await snap.getStore();
+    applyStoreStatus(status);
+    if (status.ready) await initializeStoreUi();
+  } catch (error) { applyStoreStatus({ ready: false, error: error.message }); }
 })();

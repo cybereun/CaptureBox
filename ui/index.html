@@ -8,6 +8,14 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="storeLock" class="store-lock" role="alertdialog" aria-modal="true" aria-labelledby="storeLockTitle" aria-describedby="storeLockMessage">
+  <section class="store-lock-card">
+    <h1 id="storeLockTitle">보관함을 열 수 없습니다</h1>
+    <p id="storeLockMessage">CaptureBox 보관함을 안전하게 열지 못했습니다. 원본 파일은 그대로 보존됩니다. 문제가 해결된 뒤 다시 시도해 주세요.</p>
+    <p id="storeLockError" class="store-lock-error"></p>
+    <div class="store-lock-actions"><button id="storeRetry" class="primary">다시 시도</button><button id="storeQuit">종료</button></div>
+  </section>
+</div>
 <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
   <defs>
     <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec0ff"/><stop offset="1" stop-color="#2f6df0"/></linearGradient>

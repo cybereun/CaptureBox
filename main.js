@@ -1,6 +1,6 @@
 'use strict';
 const {
-  app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard, nativeImage,
+  app, BrowserWindow, ipcMain, desktopCapturer, screen, clipboard, nativeImage, safeStorage,
   dialog, globalShortcut, shell, ClipboardItem, Tray, Menu,
 } = require('electron');
 const path = require('path');
@@ -8,6 +8,8 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 const { Stitcher } = require('./stitch');
+const { openVault } = require('./vault');
+const { migrateIndexedFiles, resolveCaptureDirectory } = require('./store-migration');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -18,40 +20,129 @@ let win = null;
 let busy = false;
 
 /* ---------- 저장소 (에셋 + 설정) ---------- */
-let assetsDir, indexFile, settingsFile;
+let assetsDir, indexFile, settingsFile, legacySettingsFile;
+let vault = null;
 let assets = [];
 let settings = { autoCopy: true, clipOnly: false };
 
 let storeError = '';
+let storeReady = false;
 const defaultDir = () => path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
 const legacyDir = () => path.join(app.getPath('userData'), 'assets');         // v1.0.1 이하의 기본 위치
 
-function initStore() {
-  settingsFile = path.join(app.getPath('userData'), 'settings.json');
-  try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { /* 기본값 */ }
-  // 사용자가 지정한 폴더는 다시 바꾸기 전까지 유지한다. 쓸 수 없으면 이번 실행만 기본 위치를 쓰고 설정은 그대로 둔다.
-  assetsDir = defaultDir();
-  if (settings.assetsDir) {
-    try {
-      fs.mkdirSync(settings.assetsDir, { recursive: true });
-      fs.accessSync(settings.assetsDir, fs.constants.W_OK);
-      assetsDir = settings.assetsDir;
-    } catch { storeError = `지정한 폴더를 사용할 수 없어 임시로 기본 위치를 사용합니다: ${settings.assetsDir}`; }
+function parseSettings(bytes, label) {
+  let parsed;
+  try { parsed = JSON.parse(bytes.toString('utf8')); } catch (error) {
+    throw new Error(`${label} is malformed: ${error.message}`);
   }
-  // 예전 기본 위치에 보관함이 있으면 새 기본 위치로 옮긴다.
-  if (!settings.assetsDir && fs.existsSync(path.join(legacyDir(), 'index.json'))) {
-    const target = assetsDir;
-    assetsDir = legacyDir();
-    indexFile = path.join(assetsDir, 'index.json');
-    try { assets = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch { assets = []; }
-    assets = assets.filter((a) => fs.existsSync(imgPath(a.id)));
-    try { moveStore(target); } catch (e) { storeError = `기본 폴더로 옮기지 못했습니다: ${e.message}`; }
-    return;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(`${label} is invalid`);
+  return parsed;
+}
+
+function hasEncryptedData(directory) {
+  if (!directory || !fs.existsSync(directory)) return false;
+  try { return fs.readdirSync(directory).some((name) => name.endsWith('.cbx')); } catch { return false; }
+}
+
+function parseAssetIndex(bytes, label) {
+  let parsed;
+  try { parsed = JSON.parse(bytes.toString('utf8')); } catch (error) {
+    throw new Error(`${label} is malformed: ${error.message}`);
   }
+  if (!Array.isArray(parsed)) throw new Error(`${label} is invalid`);
+  return parsed;
+}
+
+async function initStore() {
+  storeReady = false;
+  assets = [];
+  const userData = app.getPath('userData');
+  settingsFile = path.join(userData, 'settings.cbx');
+  legacySettingsFile = path.join(userData, 'settings.json');
+  const profileData = process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local');
+  const vaultDirectory = path.join(profileData, 'CaptureBox');
+  const keyFile = path.join(vaultDirectory, 'vault-key.bin');
+  const stateFile = path.join(vaultDirectory, 'vault-state.bin');
+  const legacySettings = !fs.existsSync(settingsFile) && fs.existsSync(legacySettingsFile)
+    ? parseSettings(fs.readFileSync(legacySettingsFile), 'Legacy CaptureBox settings')
+    : null;
+  const candidates = [legacySettings && legacySettings.assetsDir, defaultDir(), legacyDir()];
+  const keyMustExist = fs.existsSync(stateFile) || fs.existsSync(settingsFile) || candidates.some(hasEncryptedData);
+  vault = await openVault({ safeStorage, keyFile, stateFile, requireExistingKey: keyMustExist });
+
+  // Shared Store/GitHub state is read before applying build-specific encrypted settings.
+  const sharedState = await vault.readState();
+  let storedSettings = null;
+  if (fs.existsSync(settingsFile)) storedSettings = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+  else if (legacySettings) storedSettings = legacySettings;
+  settings = { autoCopy: true, clipOnly: false, ...(storedSettings || {}) };
+
+  const selected = await resolveCaptureDirectory({
+    vault,
+    legacySettings: sharedState ? null : storedSettings,
+    fallbackDirectory: !sharedState && !storedSettings && fs.existsSync(path.join(legacyDir(), 'index.json')) ? legacyDir() : defaultDir(),
+  });
+  assetsDir = selected.directory;
   fs.mkdirSync(assetsDir, { recursive: true });
-  indexFile = path.join(assetsDir, 'index.json');
-  try { assets = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch { assets = []; }
-  assets = assets.filter((a) => fs.existsSync(imgPath(a.id)));
+  fs.accessSync(assetsDir, fs.constants.W_OK);
+  indexFile = path.join(assetsDir, 'index.cbx');
+
+  const encryptedIndexExists = fs.existsSync(indexFile);
+  const legacyIndexPath = path.join(assetsDir, 'index.json');
+  const legacyIndexExists = fs.existsSync(legacyIndexPath);
+  if (encryptedIndexExists) {
+    try { assets = parseAssetIndex(vault.readFile(indexFile), 'Encrypted CaptureBox index'); }
+    catch (error) {
+      if (!legacyIndexExists) throw error;
+      assets = parseAssetIndex(fs.readFileSync(legacyIndexPath), 'Legacy CaptureBox index');
+    }
+  } else if (legacyIndexExists) {
+    assets = parseAssetIndex(fs.readFileSync(legacyIndexPath), 'Legacy CaptureBox index');
+  } else {
+    if (hasEncryptedData(assetsDir)) throw new Error('CaptureBox encrypted files exist but the asset index is missing');
+    assets = [];
+  }
+
+  await migrateIndexedFiles({
+    directory: assetsDir,
+    assets,
+    vault,
+    makeThumbnail: async (bytes) => {
+      const image = nativeImage.createFromBuffer(bytes);
+      if (image.isEmpty()) throw new Error('CaptureBox thumbnail source image is invalid');
+      return (image.getSize().width > 360 ? image.resize({ width: 360, quality: 'good' }) : image).toPNG();
+    },
+  });
+
+  if (!fs.existsSync(settingsFile)) {
+    vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(settings)));
+    const verified = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+    if (JSON.stringify(verified) !== JSON.stringify(settings)) throw new Error('Encrypted CaptureBox settings failed verification');
+  }
+  const settingsDirectoryBefore = settings.assetsDir;
+  if (assetsDir.toLowerCase() === defaultDir().toLowerCase()) delete settings.assetsDir;
+  else settings.assetsDir = assetsDir;
+  if (selected.source !== 'shared-state' || settingsDirectoryBefore !== settings.assetsDir) {
+    vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(settings)));
+    const verifiedSettings = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
+    if (JSON.stringify(verifiedSettings) !== JSON.stringify(settings)) throw new Error('Encrypted CaptureBox settings failed verification');
+  }
+  if (fs.existsSync(legacySettingsFile)) fs.rmSync(legacySettingsFile, { force: true });
+  await vault.writeState(assetsDir);
+  storeError = '';
+  storeReady = true;
+  return storeInfo();
+}
+
+async function retryStore() {
+  try {
+    await initStore();
+  } catch (error) {
+    storeReady = false;
+    assets = [];
+    storeError = String(error && error.message || error).split(/\r?\n/)[0].slice(0, 240);
+  }
+  return storeInfo();
 }
 
 /* 저장 폴더 변경: 기존 에셋을 새 폴더로 복사(성공 후 원본 삭제)하고, 새 폴더에 있던 에셋과 합친다. */
@@ -87,13 +178,16 @@ function moveStore(newDir) {
   saveSettings();
   return { ok: true };
 }
-const storeInfo = () => ({ dir: assetsDir, isDefault: assetsDir.toLowerCase() === defaultDir().toLowerCase(), error: storeError, count: assets.length });
-const imgPath = (id) => path.join(assetsDir, `${id}.png`);
-const thumbPath = (id) => path.join(assetsDir, `${id}.thumb.png`);
-const saveIndex = () => fs.writeFileSync(indexFile, JSON.stringify(assets, null, 1));
-const saveSettings = () => fs.writeFileSync(settingsFile, JSON.stringify(settings));
+const storeInfo = () => ({ ready: storeReady, dir: assetsDir || '', isDefault: !!assetsDir && assetsDir.toLowerCase() === defaultDir().toLowerCase(), error: storeError, count: assets.length });
+const assertStoreReady = () => { if (!storeReady || !vault) throw new Error(storeError || 'CaptureBox 보관함을 먼저 복구해야 합니다'); };
+const imgPath = (id) => path.join(assetsDir, `${id}.cbx`);
+const thumbPath = (id) => path.join(assetsDir, `${id}.thumb.cbx`);
+const readAsset = (id) => { assertStoreReady(); return vault.readFile(imgPath(id)); };
+const readThumbnail = (id) => { assertStoreReady(); return vault.readFile(thumbPath(id)); };
+const saveIndex = () => { assertStoreReady(); vault.writeFileAtomic(indexFile, Buffer.from(JSON.stringify(assets, null, 1))); };
+const saveSettings = () => { assertStoreReady(); vault.writeFileAtomic(settingsFile, Buffer.from(JSON.stringify(settings))); };
 
-const view = (a) => ({ ...a, url: pathToFileURL(imgPath(a.id)).href, thumbUrl: pathToFileURL(thumbPath(a.id)).href });
+const view = (a) => ({ ...a, url: `capturebox-asset://asset/${encodeURIComponent(a.id)}?kind=image`, thumbUrl: `capturebox-asset://asset/${encodeURIComponent(a.id)}?kind=thumb` });
 const findAsset = (id) => assets.find((a) => a.id === id);
 
 function stamp() {
@@ -103,11 +197,12 @@ function stamp() {
 }
 
 function addAsset(img, mode) {
+  assertStoreReady();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const { width, height } = img.getSize();
-  fs.writeFileSync(imgPath(id), img.toPNG());
+  vault.writeFileAtomic(imgPath(id), img.toPNG());
   const thumb = width > 360 ? img.resize({ width: 360, quality: 'good' }) : img;
-  fs.writeFileSync(thumbPath(id), thumb.toPNG());
+  vault.writeFileAtomic(thumbPath(id), thumb.toPNG());
   const asset = { id, name: `${MODE_LABEL[mode]} ${stamp()}`, mode, width, height, createdAt: Date.now() };
   assets.unshift(asset);
   saveIndex();
@@ -355,6 +450,10 @@ async function finish(img, mode) {
 }
 
 async function runCapture(mode, delay = 0) {
+  if (!storeReady) {
+    if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: storeError || '보관함을 먼저 복구해 주세요' });
+    return false;
+  }
   if (busy) return;
   busy = true;
   let done = false;
@@ -384,10 +483,10 @@ async function runCapture(mode, delay = 0) {
 }
 
 /* ---------- IPC ---------- */
-ipcMain.handle('assets:list', () => assets.map(view));
+ipcMain.handle('assets:list', () => storeReady ? assets.map(view) : []);
 ipcMain.handle('settings:get', () => settings);
-ipcMain.handle('settings:set', (_e, patch) => { settings = { ...settings, ...patch }; saveSettings(); return settings; });
-ipcMain.handle('capture:start', (_e, mode, delay) => { runCapture(mode, Number(delay) || 0); });
+ipcMain.handle('settings:set', (_e, patch) => { assertStoreReady(); settings = { ...settings, ...patch }; saveSettings(); return settings; });
+ipcMain.handle('capture:start', (_e, mode, delay) => { assertStoreReady(); return runCapture(mode, Number(delay) || 0); });
 
 ipcMain.handle('windows:list', async () => {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 420, height: 280 } });
@@ -397,6 +496,7 @@ ipcMain.handle('windows:list', async () => {
 });
 
 ipcMain.handle('capture:window', async (_e, id) => {
+  assertStoreReady();
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 3840, height: 2160 } });
   const s = srcs.find((x) => x.id === id);
   if (!s || s.thumbnail.isEmpty()) return { ok: false, message: '창을 캡처할 수 없습니다 (최소화된 창일 수 있어요)' };
@@ -407,30 +507,35 @@ ipcMain.handle('capture:window', async (_e, id) => {
 });
 
 ipcMain.handle('asset:rename', (_e, id, name) => {
+  assertStoreReady();
   const a = findAsset(id);
   if (a && name.trim()) { a.name = name.trim().slice(0, 120); saveIndex(); }
 });
 ipcMain.handle('asset:delete', (_e, id) => {
+  assertStoreReady();
   const i = assets.findIndex((a) => a.id === id);
   if (i < 0) return;
   assets.splice(i, 1);
-  for (const f of [imgPath(id), thumbPath(id)]) fs.rm(f, { force: true }, () => {});
+  for (const f of [imgPath(id), thumbPath(id)]) vault.removeFile(f);
   saveIndex();
 });
 ipcMain.handle('assets:deleteMany', (_e, ids) => {
+  assertStoreReady();
   const set = new Set(Array.isArray(ids) ? ids : []);
   const gone = assets.filter((a) => set.has(a.id));
   if (!gone.length) return 0;
   assets = assets.filter((a) => !set.has(a.id));
-  for (const a of gone) for (const f of [imgPath(a.id), thumbPath(a.id)]) fs.rm(f, { force: true }, () => {});
+  for (const a of gone) for (const f of [imgPath(a.id), thumbPath(a.id)]) vault.removeFile(f);
   saveIndex();
   return gone.length;
 });
 ipcMain.handle('asset:copy', async (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return;
-  await copyImage(nativeImage.createFromPath(imgPath(id)));
+  await copyImage(nativeImage.createFromBuffer(readAsset(id)));
 });
 ipcMain.handle('asset:save', async (_e, id) => {
+  assertStoreReady();
   const a = findAsset(id);
   if (!a) return false;
   const r = await dialog.showSaveDialog(win, {
@@ -442,7 +547,7 @@ ipcMain.handle('asset:save', async (_e, id) => {
   // 확장자가 png/jpg 가 아니면 열 수 없는 파일이 되므로 .png 를 붙인다.
   let out = r.filePath;
   if (!/\.(png|jpe?g)$/i.test(out)) out += '.png';
-  const src = fs.readFileSync(imgPath(id));
+  const src = readAsset(id);
   if (/\.jpe?g$/i.test(out)) {
     const img = nativeImage.createFromBuffer(src);
     if (img.isEmpty()) throw new Error('이미지를 읽을 수 없습니다');
@@ -453,10 +558,12 @@ ipcMain.handle('asset:save', async (_e, id) => {
   return true;
 });
 ipcMain.handle('asset:dataUrl', (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return null;
-  return 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64');
+  return 'data:image/png;base64,' + readAsset(id).toString('base64');
 });
 ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
+  assertStoreReady();
   const img = nativeImage.createFromDataURL(dataUrl);
   if (img.isEmpty()) return null;
   const base = findAsset(baseId);
@@ -465,6 +572,7 @@ ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
   return a.id;
 });
 ipcMain.handle('asset:print', (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return { ok: false };
   const { pathToFileURL } = require('url');
   const w = new BrowserWindow({
@@ -477,6 +585,7 @@ ipcMain.handle('asset:print', (_e, id) => {
 });
 ipcMain.handle('asset:reveal', (_e, id) => { if (findAsset(id)) shell.showItemInFolder(imgPath(id)); });
 ipcMain.on('asset:drag', (e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return;
   e.sender.startDrag({ file: imgPath(id), icon: nativeImage.createFromPath(thumbPath(id)).resize({ width: 96 }) });
 });
@@ -530,7 +639,18 @@ function initUpdater() {
   if (win) win.on('focus', () => { if (Date.now() - lastCheck > 60 * 1000) checkUpdate(); });
 }
 ipcMain.handle('store:get', () => storeInfo());
+ipcMain.handle('store:retry', async () => {
+  const status = await retryStore();
+  if (status.ready) {
+    registerHotkeys();
+    buildTrayMenu();
+  }
+  if (win && !win.isDestroyed()) win.webContents.send('store:status', status);
+  return status;
+});
+ipcMain.handle('store:quit', () => { quitting = true; app.quit(); });
 ipcMain.handle('store:choose', async () => {
+  assertStoreReady();
   const r = await dialog.showOpenDialog(win, { title: '저장할 폴더 선택', defaultPath: assetsDir, properties: ['openDirectory', 'createDirectory'] });
   if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true, ...storeInfo() };
   try { moveStore(r.filePaths[0]); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
@@ -538,11 +658,12 @@ ipcMain.handle('store:choose', async () => {
   return { ok: true, ...storeInfo() };
 });
 ipcMain.handle('store:reset', () => {
+  assertStoreReady();
   try { moveStore(defaultDir()); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
   win.webContents.send('assets:changed', {});
   return { ok: true, ...storeInfo() };
 });
-ipcMain.handle('store:open', () => shell.openPath(assetsDir));
+ipcMain.handle('store:open', () => { assertStoreReady(); return shell.openPath(assetsDir); });
 ipcMain.handle('update:get', () => upd);
 ipcMain.handle('update:check', () => checkUpdate());
 ipcMain.handle('update:install', () => { if (updater && upd.state === 'ready') updater.quitAndInstall(true, true); });
@@ -660,9 +781,10 @@ async function ocrImage(img, mode) {
   return { text: await ocrWindows(img), engine: 'windows', note: '' };
 }
 ipcMain.handle('asset:ocr', async (_e, id) => {
+  assertStoreReady();
   if (!findAsset(id)) return { ok: false, message: '이미지를 찾을 수 없습니다' };
   try {
-    const r = await ocrImage(nativeImage.createFromPath(imgPath(id)));
+    const r = await ocrImage(nativeImage.createFromBuffer(readAsset(id)));
     if (!r.text) return { ok: true, text: '', engine: r.engine, message: '인식된 글자가 없습니다' };
     clipboard.writeText(r.text);
     return { ok: true, text: r.text, engine: r.engine, note: r.note };
@@ -670,6 +792,7 @@ ipcMain.handle('asset:ocr', async (_e, id) => {
 });
 ipcMain.handle('ocr:get', () => ({ mode: settings.ocrMode || 'precise', preciseAvailable: preciseStatus() }));
 ipcMain.handle('ocr:set', (_e, mode) => {
+  assertStoreReady();
   settings.ocrMode = mode === 'windows' ? 'windows' : 'precise';
   saveSettings();
   return { mode: settings.ocrMode, preciseAvailable: preciseStatus() };
@@ -681,6 +804,7 @@ const pins = new Set();
 const pinAnchor = new Map();
 const pinSizes = new Map();   // 핀마다 "의도한" 크기. getBounds() 는 배율 환산 반올림으로 ±1px 달라질 수 있어 기준으로 쓰지 않는다
 function createPin(id) {
+  assertStoreReady();
   const a = findAsset(id);
   if (!a) return null;
   const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -706,7 +830,7 @@ function createPin(id) {
   pw.on('closed', () => { pins.delete(pw); pinAnchor.delete(wid); pinSizes.delete(wid); });
   pw.loadFile(path.join(__dirname, 'ui', 'pin.html'));
   pw.webContents.once('did-finish-load', () => {
-    pw.webContents.send('pin:init', 'data:image/png;base64,' + fs.readFileSync(imgPath(id)).toString('base64'));
+    pw.webContents.send('pin:init', 'data:image/png;base64,' + readAsset(id).toString('base64'));
   });
   return pw;
 }
@@ -852,6 +976,7 @@ function createWindow() {
   win.on('page-title-updated', (e) => e.preventDefault());   // 제목줄에 버전을 계속 표시
   win.on('close', (e) => {
     if (quitting || !tray) return;
+    if (!storeReady) { e.preventDefault(); quitting = true; app.quit(); return; }
     e.preventDefault();
     win.hide();
     if (!settings.trayNoticeShown) {
@@ -864,8 +989,8 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'ui', 'index.html'));
 }
 
-app.whenReady().then(() => {
-  initStore();
+app.whenReady().then(async () => {
+  await retryStore();
   createWindow();
   createTray();
   initUpdater();
