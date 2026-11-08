@@ -5,6 +5,7 @@
  * 개발 모드가 아니라 "패키징된 앱"에서 돌리는 것이 핵심이다 (asar 경로 문제 같은 설치본 전용 버그를 잡기 위해).
  */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const { spawn } = require('node:child_process');
 
 // 스크롤 캡처 결과 분석: 테스트 페이지는 행마다 어두운 2px 경계선이 있다. 경계선 간격이 일정해야 이어붙임이 정확한 것.
 function analyzeStitch(img, sf) {
@@ -36,7 +37,7 @@ const mean = (img) => {
 };
 
 exports.run = async (ctx) => {
-  const { app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path } = ctx;
+  const { app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, clipboard, fs, path } = ctx;
   const reportPath = process.env.CB_SELFTEST;
   const hiddenRun = process.env.CB_SELFTEST_HIDDEN === '1';
   const results = [];
@@ -71,8 +72,9 @@ exports.run = async (ctx) => {
 
   if (process.env.CB_SELFTEST_SEED === '1') {
     await step('격리된 사용자 데이터 · 레거시 마이그레이션 · 미사용 파일 보존', async () => {
-      const userData = app.getPath('userData');
-      const directory = path.join(userData, 'selftest-legacy-captures');
+      const userData = ctx.packageUserDataDir;
+      const sharedProfile = ctx.sharedProfileDir;
+      const directory = path.join(userData, 'assets');
       const id = 'verifylegacy01';
       const status = await H('store:get');
       if (!status.ready || path.resolve(status.dir) !== path.resolve(directory)) throw new Error(`격리 보관함 경로가 다릅니다: ${JSON.stringify(status)}`);
@@ -86,10 +88,35 @@ exports.run = async (ctx) => {
       if (fs.readFileSync(path.join(directory, 'keep-this-file.txt'), 'utf8') !== 'unindexed user file: keep unchanged') throw new Error('인덱스에 없는 파일이 바뀌었습니다');
       if (fs.existsSync(path.join(userData, 'settings.json'))) throw new Error('평문 설정 파일이 남았습니다');
       if (fs.readFileSync(ctx.indexFile).toString('ascii', 0, 4) !== 'CBX1' || fs.readFileSync(ctx.settingsFile).toString('ascii', 0, 4) !== 'CBX1') throw new Error('색인이나 설정이 암호화되지 않았습니다');
-      const stateFile = path.join(userData, 'selftest-profile', 'CaptureBox', 'vault-state.bin');
+      const stateFile = path.join(sharedProfile, 'vault-state.bin');
       if (fs.readFileSync(stateFile).includes(Buffer.from(directory))) throw new Error('공유 보관함 경로가 평문 상태 파일에 있습니다');
-      if (fs.existsSync(path.join(userData, 'temp-exports', 'leftover.png'))) throw new Error('이전 실행의 임시 평문 이미지가 정리되지 않았습니다');
-      return '앱 전용 사용자 데이터로 업그레이드, 인증된 암호화, 나머지 파일 보존 OK';
+      if (fs.existsSync(path.join(sharedProfile, 'temp-exports', 'leftover.png'))) throw new Error('이전 실행의 임시 평문 이미지가 정리되지 않았습니다');
+      if (app.getPath('userData') !== sharedProfile || app.getPath('sessionData') !== sharedProfile) throw new Error('Store/GitHub 공용 userData와 Electron sessionData 경로가 다릅니다');
+      const marker = path.join(userData, 'second-instance-lock-acquired');
+      const probe = spawn(process.execPath, [`--user-data-dir=${path.join(userData, 'alternate-build-profile')}`], {
+        env: { ...process.env, CB_SELFTEST_LOCK_PROBE: '1', CB_SELFTEST_LOCK_MARKER: marker },
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      const probeStatus = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { probe.kill(); reject(new Error('두 번째 프로필의 단일 실행 확인이 시간 초과되었습니다')); }, 30000);
+        probe.once('error', (error) => { clearTimeout(timer); reject(error); });
+        probe.once('close', (code) => { clearTimeout(timer); resolve(code); });
+      });
+      if (probeStatus !== 0 || fs.existsSync(marker)) throw new Error(`두 번째 프로필이 공유 단일 실행 잠금을 얻었습니다: 종료 코드 ${probeStatus}`);
+      return 'legacy assets 마이그레이션, AES-GCM, 공유 프로필·단일 실행 잠금 OK';
+    });
+  }
+
+  if (process.env.CB_SELFTEST_EXPECT_SHARED === '1') {
+    await step('Store/GitHub 프로필 간 DPAPI 키·캡처 폴더 공유', async () => {
+      const expectedDirectory = process.env.CB_SELFTEST_EXPECT_DIR;
+      const status = await H('store:get');
+      if (!status.ready || path.resolve(status.dir) !== path.resolve(expectedDirectory)) throw new Error(`공유 캡처 폴더를 열지 못했습니다: ${JSON.stringify(status)}`);
+      if (!ctx.assets.some((asset) => asset.id === 'verifylegacy01')) throw new Error('다른 프로필이 만든 캡처를 열지 못했습니다');
+      if (!ctx.vault.readFile(path.join(status.dir, 'index.cbx')).toString('utf8').includes('verifylegacy01')) throw new Error('공유 캡처 색인을 복호화하지 못했습니다');
+      if (app.getPath('userData') !== ctx.sharedProfileDir || app.getPath('sessionData') !== ctx.sharedProfileDir) throw new Error('공용 Electron 프로필 경로가 바뀌었습니다');
+      return '별도 앱 프로필에서 Windows 보호 키와 캡처 색인을 열었습니다';
     });
   }
 
@@ -195,6 +222,8 @@ exports.run = async (ctx) => {
     }
 
     await step('암호화 보관함 · 갤러리 · 편집 · 복사 · 내보내기 · 인쇄 · 드래그', async () => {
+      const missingSourceAssets = () => ctx.assets.filter((asset) => !fs.existsSync(path.join(ctx.assetsDir, `${asset.id}.cbx`))).map((asset) => asset.id);
+      if (missingSourceAssets().length) throw new Error(`이동 시험 전에 색인 이미지가 없습니다: ${missingSourceAssets().join(', ')}`);
       const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
       let imageUrl;
       try {
@@ -232,14 +261,18 @@ exports.run = async (ctx) => {
         if (failedLoad.loaded || !ctx.assets.some((asset) => asset.id === id)) throw new Error('손상된 이미지를 그대로 성공 처리했거나 색인 항목을 제거했습니다');
       } finally { fs.writeFileSync(imagePath, originalCipher); }
 
-      await H('asset:copy', id);
-      const clipboard = require('electron').clipboard;
+      if (await H('asset:copy', id) !== true) throw new Error('성공한 클립보드 복사가 성공을 반환하지 않았습니다');
       const clipboardItems = await clipboard.read();
       const copiedImage = clipboardItems.find((entry) => entry.types.includes('image/png'));
       if (!copiedImage) throw new Error('클립보드에 PNG 이미지 항목이 없습니다');
       const imageBlob = await copiedImage.getType('image/png');
       const clipboardImage = nativeImage.createFromBuffer(Buffer.from(await imageBlob.arrayBuffer()));
       if (clipboardImage.isEmpty() || clipboardImage.getSize().width !== 80 || clipboardImage.getSize().height !== 50) throw new Error('클립보드 복사 이미지가 다릅니다');
+      const oldClipboardWrite = clipboard.write;
+      try {
+        clipboard.write = () => { throw new Error('simulated clipboard failure'); };
+        if (await H('asset:copy', id) !== false) throw new Error('실패한 클립보드 복사가 실패를 반환하지 않았습니다');
+      } finally { clipboard.write = oldClipboardWrite; }
 
       const { dialog } = require('electron');
       const previousDialog = dialog.showSaveDialog;
@@ -297,10 +330,53 @@ exports.run = async (ctx) => {
       } finally { shell.showItemInFolder = oldReveal; }
 
       const originalDirectory = ctx.assetsDir;
+      const originalIndex = fs.readFileSync(ctx.indexFile);
+      const aliasDirectory = path.join(ctx.packageUserDataDir, 'capture-alias');
+      fs.symlinkSync(originalDirectory, aliasDirectory, 'junction');
+      try {
+        await ctx.moveStore(aliasDirectory);
+        if (path.resolve(ctx.assetsDir) !== path.resolve(originalDirectory) || !fs.existsSync(ctx.indexFile)) throw new Error('정션 별칭 경로를 같은 원본 폴더로 인식하지 못했습니다');
+        if (!fs.readFileSync(ctx.indexFile).equals(originalIndex)) throw new Error('같은 폴더 별칭 이동이 색인을 바꿨습니다');
+      } finally { fs.rmdirSync(aliasDirectory); }
+      if (missingSourceAssets().length) throw new Error(`정션 별칭 정리 뒤 원본 이미지가 사라졌습니다: ${missingSourceAssets().join(', ')}`);
+
+      let tempMoveRejected = false;
+      try { await ctx.moveStore(path.join(ctx.temporaryExportsDir, 'captures')); }
+      catch (error) { tempMoveRejected = /temporary export/i.test(error.message); }
+      if (!tempMoveRejected) throw new Error('임시 평문 내보내기 폴더 안으로 보관함을 옮길 수 있었습니다');
+      if (missingSourceAssets().length) throw new Error(`임시 폴더 거부 뒤 원본 이미지가 사라졌습니다: ${missingSourceAssets().join(', ')}`);
+
       const movedDirectory = path.join(app.getPath('userData'), 'selftest-moved-captures');
       try {
-        await ctx.moveStore(movedDirectory);
+        const expectedIds = ctx.assets.map((asset) => asset.id);
+        let releaseStateWrite;
+        let enteredStateWrite;
+        const reachedStateWrite = new Promise((resolve) => { enteredStateWrite = resolve; });
+        const stateWriteGate = new Promise((resolve) => { releaseStateWrite = resolve; });
+        const writeState = ctx.vault.writeState;
+        ctx.vault.writeState = async function (directory) {
+          enteredStateWrite();
+          await stateWriteGate;
+          return writeState.call(this, directory);
+        };
+        const moving = ctx.moveStore(movedDirectory);
+        try {
+          await Promise.race([
+            reachedStateWrite,
+            moving.then(() => { throw new Error('폴더 이동이 상태 저장 지점에 도달하지 않고 완료되었습니다'); }),
+            sleep(30000).then(() => { throw new Error('폴더 이동이 상태 저장 지점에 도달하지 않았습니다'); }),
+          ]);
+          let mutationRejected = false;
+          try { ctx.addAsset(nativeImage.createFromBuffer(ctx.readAsset(expectedIds[0])), 'edit'); }
+          catch (error) { mutationRejected = /moving|옮기는 중/i.test(error.message); }
+          if (!mutationRejected) throw new Error('폴더 이동 중 새 캡처 변경을 거부하지 않았습니다');
+        } finally {
+          releaseStateWrite();
+          ctx.vault.writeState = writeState;
+        }
+        await moving;
         if (path.resolve(ctx.storeInfo().dir) !== path.resolve(movedDirectory)) throw new Error('보관함 폴더 변경이 반영되지 않았습니다');
+        if (JSON.stringify(ctx.assets.map((asset) => asset.id)) !== JSON.stringify(expectedIds)) throw new Error('이동 중 캡처 변경이 유실되거나 추가되었습니다');
         if (fs.readFileSync(path.join(movedDirectory, `${id}.cbx`)).toString('ascii', 0, 4) !== 'CBX1') throw new Error('폴더 이동 후 이미지가 암호화 상태가 아닙니다');
         if (path.resolve((await ctx.vault.readState()).directory) !== path.resolve(movedDirectory)) throw new Error('폴더 이동 후 공유 상태가 바뀌지 않았습니다');
         await ctx.moveStore(originalDirectory);

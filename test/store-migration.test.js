@@ -99,6 +99,14 @@ test('shared protected state takes precedence when discovering a custom capture 
   });
 });
 
+test('uses the legacy assets folder when old captures exist and settings omit assetsDir', () => {
+  assert.equal(typeof migrationApi.resolveFallbackDirectory, 'function');
+  const legacyDirectory = path.join(os.tmpdir(), 'capturebox-old-profile', 'assets');
+  const defaultDirectory = path.join(os.tmpdir(), 'Pictures', 'Screenshots');
+  assert.equal(migrationApi.resolveFallbackDirectory({ legacyDirectory, defaultDirectory, legacyIndexExists: true }), path.resolve(legacyDirectory));
+  assert.equal(migrationApi.resolveFallbackDirectory({ legacyDirectory, defaultDirectory, legacyIndexExists: false }), path.resolve(defaultDirectory));
+});
+
 test('an already encrypted index can open with a corrupt image so the protocol can report that item', () => {
   assert.equal(typeof migrationApi.shouldMigrateIndexedFiles, 'function');
   assert.equal(migrationApi.shouldMigrateIndexedFiles({ encryptedIndexExists: true, legacyIndexExists: false, legacyIndexedFilesExist: false }), false);
@@ -124,6 +132,43 @@ test('does not replace a corrupt encrypted index without a legacy source', async
   await assert.rejects(migration()({ directory, assets: [], vault }), /index|corrupt/i);
 
   assert.deepEqual(fs.readFileSync(path.join(directory, 'index.cbx')), corruptIndex);
+});
+
+test('preserves future-version encrypted image and thumbnail files alongside legacy sources', async (t) => {
+  const { directory, vault } = await fixture(t);
+  const assets = [{ id: idOf(9), name: 'Future', width: 2, height: 2, createdAt: 9 }];
+  const image = png('legacy image');
+  const thumb = png('legacy thumbnail');
+  const futureImage = Buffer.concat([Buffer.from('CBX1'), Buffer.from([2]), Buffer.alloc(28, 7)]);
+  const futureThumb = Buffer.concat([Buffer.from('CBX1'), Buffer.from([3]), Buffer.alloc(28, 8)]);
+  fs.writeFileSync(path.join(directory, `${assets[0].id}.cbx`), futureImage);
+  fs.writeFileSync(path.join(directory, `${assets[0].id}.thumb.cbx`), futureThumb);
+  fs.writeFileSync(path.join(directory, `${assets[0].id}.png`), image);
+  fs.writeFileSync(path.join(directory, `${assets[0].id}.thumb.png`), thumb);
+  fs.writeFileSync(path.join(directory, 'index.json'), JSON.stringify(assets, null, 1));
+
+  await assert.rejects(migration()({ directory, assets, vault, makeThumbnail: () => png('generated') }), (error) =>
+    error.code === 'ERR_VAULT_UNSUPPORTED_VERSION');
+
+  assert.deepEqual(fs.readFileSync(path.join(directory, `${assets[0].id}.cbx`)), futureImage);
+  assert.deepEqual(fs.readFileSync(path.join(directory, `${assets[0].id}.thumb.cbx`)), futureThumb);
+  assert.deepEqual(fs.readFileSync(path.join(directory, `${assets[0].id}.png`)), image);
+  assert.deepEqual(fs.readFileSync(path.join(directory, `${assets[0].id}.thumb.png`)), thumb);
+  assert.equal(fs.existsSync(path.join(directory, 'index.json')), true);
+});
+
+test('preserves a future-version encrypted index alongside its legacy index', async (t) => {
+  const { directory, vault } = await fixture(t);
+  const legacyIndex = Buffer.from('[]');
+  const futureIndex = Buffer.concat([Buffer.from('CBX1'), Buffer.from([2]), Buffer.alloc(28, 9)]);
+  fs.writeFileSync(path.join(directory, 'index.cbx'), futureIndex);
+  fs.writeFileSync(path.join(directory, 'index.json'), legacyIndex);
+
+  await assert.rejects(migration()({ directory, assets: [], vault }), (error) =>
+    error.code === 'ERR_VAULT_UNSUPPORTED_VERSION');
+
+  assert.deepEqual(fs.readFileSync(path.join(directory, 'index.cbx')), futureIndex);
+  assert.deepEqual(fs.readFileSync(path.join(directory, 'index.json')), legacyIndex);
 });
 
 test('retries safely when valid encrypted copies coexist with legacy originals', async (t) => {

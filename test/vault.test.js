@@ -32,9 +32,7 @@ function makeSafeStorage(options = {}) {
       const decipher = crypto.createDecipheriv('aes-256-gcm', wrappingKey, iv);
       decipher.setAuthTag(tag);
       const result = Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]).toString('utf8');
-      const shouldReEncrypt = this.shouldReEncrypt;
-      this.shouldReEncrypt = false;
-      return { result, shouldReEncrypt };
+      return { result, shouldReEncrypt: this.shouldReEncrypt };
     },
   };
 }
@@ -94,7 +92,11 @@ test('key is protected, reloadable, and re-encrypted when safeStorage requests i
   const second = await openVault({ safeStorage, keyFile, stateFile });
   assert.deepEqual(second.decrypt(envelope), plain);
   safeStorage.shouldReEncrypt = true;
+  let decryptCalls = 0;
+  const decrypt = safeStorage.decryptStringAsync.bind(safeStorage);
+  safeStorage.decryptStringAsync = async (value) => { decryptCalls++; return decrypt(value); };
   await openVault({ safeStorage, keyFile, stateFile });
+  assert.equal(decryptCalls, 1, 'a persistent rotation signal must not cause repeated decryption');
   assert.notDeepEqual(fs.readFileSync(keyFile), keyCiphertext);
 });
 

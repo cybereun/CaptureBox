@@ -10,7 +10,6 @@ const NONCE_LENGTH = 12;
 const TAG_LENGTH = 16;
 const HEADER_LENGTH = MAGIC.length + 1 + NONCE_LENGTH + TAG_LENGTH;
 const KEY_LENGTH = 32;
-const MAX_REENCRYPT_ROUNDS = 4;
 
 function asBuffer(value, label) {
   if (!Buffer.isBuffer(value)) throw new TypeError(`${label} must be a Buffer`);
@@ -53,7 +52,12 @@ function decryptBuffer(envelope, key) {
     throw new Error('Invalid CaptureBox vault file');
   }
   const version = envelope[MAGIC.length];
-  if (version !== VERSION) throw new Error(`Unsupported CaptureBox vault version: ${version}`);
+  if (version !== VERSION) {
+    const error = new Error(`Unsupported CaptureBox vault version: ${version}`);
+    error.code = 'ERR_VAULT_UNSUPPORTED_VERSION';
+    error.version = version;
+    throw error;
+  }
   const nonceStart = MAGIC.length + 1;
   const tagStart = nonceStart + NONCE_LENGTH;
   const ciphertextStart = tagStart + TAG_LENGTH;
@@ -76,20 +80,12 @@ async function protectedString(safeStorage, value) {
 async function unprotectedString(safeStorage, filePath) {
   const encrypted = fs.readFileSync(filePath);
   if (encrypted.length === 0) throw new Error('Protected CaptureBox state file is empty');
-  let result;
-  let shouldReEncrypt = false;
-  for (let attempt = 0; attempt < MAX_REENCRYPT_ROUNDS; attempt++) {
-    const decrypted = await safeStorage.decryptStringAsync(encrypted);
-    if (!decrypted || typeof decrypted.result !== 'string' || typeof decrypted.shouldReEncrypt !== 'boolean') {
-      throw new Error('Windows could not return protected CaptureBox state');
-    }
-    result = decrypted.result;
-    shouldReEncrypt ||= decrypted.shouldReEncrypt;
-    if (!decrypted.shouldReEncrypt) break;
-    if (attempt === MAX_REENCRYPT_ROUNDS - 1) throw new Error('Windows key protection is still rotating; retry later');
+  const decrypted = await safeStorage.decryptStringAsync(encrypted);
+  if (!decrypted || typeof decrypted.result !== 'string' || typeof decrypted.shouldReEncrypt !== 'boolean') {
+    throw new Error('Windows could not return protected CaptureBox state');
   }
-  if (shouldReEncrypt) atomicWriteFile(filePath, await protectedString(safeStorage, result));
-  return result;
+  if (decrypted.shouldReEncrypt) atomicWriteFile(filePath, await protectedString(safeStorage, decrypted.result));
+  return decrypted.result;
 }
 
 function validateDirectory(directory) {

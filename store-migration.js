@@ -11,7 +11,10 @@ function assetId(value) {
 }
 
 function readEncrypted(vault, filePath) {
-  try { return vault.readFile(filePath); } catch { return null; }
+  try { return vault.readFile(filePath); } catch (error) {
+    if (error && error.code === 'ERR_VAULT_UNSUPPORTED_VERSION') throw error;
+    return null;
+  }
 }
 
 function verifyLegacyMatches(targetBytes, legacyBytes, label) {
@@ -117,8 +120,16 @@ async function resolveCaptureDirectory({ vault, legacySettings, fallbackDirector
   return { directory: path.resolve(fallbackDirectory), source: 'default' };
 }
 
+function resolveFallbackDirectory({ legacyDirectory, defaultDirectory, legacyIndexExists }) {
+  const selected = legacyIndexExists ? legacyDirectory : defaultDirectory;
+  if (typeof selected !== 'string' || !path.isAbsolute(selected)) {
+    throw new Error('CaptureBox fallback directory must be an absolute path');
+  }
+  return path.resolve(selected);
+}
+
 function shouldMigrateIndexedFiles({ encryptedIndexExists, legacyIndexExists, legacyIndexedFilesExist }) {
   return !encryptedIndexExists || !!legacyIndexExists || !!legacyIndexedFilesExist;
 }
 
-module.exports = { migrateIndexedFiles, resolveCaptureDirectory, shouldMigrateIndexedFiles };
+module.exports = { migrateIndexedFiles, resolveCaptureDirectory, resolveFallbackDirectory, shouldMigrateIndexedFiles };

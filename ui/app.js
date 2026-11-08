@@ -72,7 +72,9 @@ function renderList() {
       selectedId = a.id; renderList(); renderViewer();
     });
     el.addEventListener('dblclick', async () => {
-      if (selecting) return; await snap.copy(a.id); toast('클립보드에 복사했습니다'); });
+      if (selecting) return;
+      toast(await snap.copy(a.id) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
+    });
     el.addEventListener('dragstart', (e) => { e.preventDefault(); snap.drag(a.id); });
     list.append(el);
   }
@@ -206,7 +208,9 @@ $('canvas').addEventListener('wheel', (e) => {
   cv.scrollLeft = px * (next / cur) - (e.clientX - r.left);
   cv.scrollTop = py * (next / cur) - (e.clientY - r.top);
 }, { passive: false });
-$('copy').addEventListener('click', async () => { if (selectedId) { await snap.copy(selectedId); toast('클립보드에 복사했습니다'); } });
+$('copy').addEventListener('click', async () => {
+  if (selectedId) toast(await snap.copy(selectedId) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
+});
 $('save').addEventListener('click', async () => { if (selectedId && (await snap.save(selectedId))) toast('저장했습니다'); });
 $('reveal').addEventListener('click', () => selectedId && snap.reveal(selectedId));
 $('print').addEventListener('click', printCurrent);
@@ -240,8 +244,7 @@ window.addEventListener('keydown', async (e) => {
   if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); printCurrent(); }
   else if (e.key === 'Escape') $('picker').hidden = true;
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedId) {
-    await snap.copy(selectedId);
-    toast('클립보드에 복사했습니다');
+    toast(await snap.copy(selectedId) ? '클립보드에 복사했습니다' : '클립보드에 복사하지 못했습니다');
   }
 });
 

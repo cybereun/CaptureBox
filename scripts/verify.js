@@ -14,6 +14,18 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const exe = path.join(root, 'dist', 'win-unpacked', 'CaptureBox.exe');
+let sharedProfile = '';
+
+function removeVerificationDirectory(candidate) {
+  const absolute = path.resolve(candidate);
+  const temporaryRoot = path.resolve(os.tmpdir());
+  const relative = path.relative(temporaryRoot, absolute);
+  if (!relative || path.isAbsolute(relative) || relative.startsWith(`..${path.sep}`) || relative === '..' ||
+      path.dirname(absolute) !== temporaryRoot || !path.basename(absolute).startsWith('cb-verify')) {
+    throw new Error(`Refusing to clear an unexpected verification path: ${absolute}`);
+  }
+  fs.rmSync(absolute, { recursive: true, force: true });
+}
 
 if (!process.argv.includes('--no-build')) {
   console.log('> 설치 파일까지 빌드 중 (npm run dist) … 릴리즈에 올릴 파일과 같은 빌드를 검사합니다');
@@ -21,44 +33,49 @@ if (!process.argv.includes('--no-build')) {
   if (b.status !== 0) { console.error('패키징에 실패했습니다.'); process.exit(1); }
 }
 if (!fs.existsSync(exe)) { console.error(`실행 파일이 없습니다: ${exe}`); process.exit(1); }
+sharedProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-verify-shared-'));
 
 function run(label, args, env) {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-verify-'));
   const reportPath = path.join(userData, 'report.json');
-  const captures = path.join(userData, 'selftest-legacy-captures');
-  fs.mkdirSync(captures, { recursive: true });
-  const legacyPng = fs.readFileSync(path.join(root, 'assets', 'icon.png'));
-  const legacyId = 'verifylegacy01';
-  const asset = {
-    id: legacyId,
-    name: 'Legacy migration fixture',
-    mode: 'region',
-    width: legacyPng.readUInt32BE(16),
-    height: legacyPng.readUInt32BE(20),
-    createdAt: 1700000000000,
-  };
-  fs.writeFileSync(path.join(captures, `${legacyId}.png`), legacyPng);
-  fs.writeFileSync(path.join(captures, 'index.json'), JSON.stringify([asset], null, 1));
-  fs.writeFileSync(path.join(captures, 'keep-this-file.txt'), 'unindexed user file: keep unchanged');
-  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autoCopy: true, clipOnly: false, assetsDir: captures }));
-  fs.mkdirSync(path.join(userData, 'temp-exports'), { recursive: true });
-  fs.writeFileSync(path.join(userData, 'temp-exports', 'leftover.png'), legacyPng);
+  if (env.CB_SELFTEST_SEED === '1') {
+    const captures = path.join(userData, 'assets');
+    fs.mkdirSync(captures, { recursive: true });
+    const legacyPng = fs.readFileSync(path.join(root, 'assets', 'icon.png'));
+    const legacyId = 'verifylegacy01';
+    const asset = {
+      id: legacyId,
+      name: 'Legacy migration fixture',
+      mode: 'region',
+      width: legacyPng.readUInt32BE(16),
+      height: legacyPng.readUInt32BE(20),
+      createdAt: 1700000000000,
+    };
+    fs.writeFileSync(path.join(captures, `${legacyId}.png`), legacyPng);
+    fs.writeFileSync(path.join(captures, 'index.json'), JSON.stringify([asset], null, 1));
+    fs.writeFileSync(path.join(captures, 'keep-this-file.txt'), 'unindexed user file: keep unchanged');
+    fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autoCopy: false, clipOnly: false }));
+    fs.mkdirSync(path.join(sharedProfile, 'temp-exports'), { recursive: true });
+    fs.writeFileSync(path.join(sharedProfile, 'temp-exports', 'leftover.png'), legacyPng);
+  }
   console.log(`\n> ${label} 실행 중 …`);
   const r = spawnSync(exe, [`--user-data-dir=${userData}`, ...args], {
-    env: { ...process.env, CB_SELFTEST: reportPath, CB_SELFTEST_SEED: '1', ...env },
+    env: { ...process.env, CB_SELFTEST: reportPath, CB_SELFTEST_PROFILE_ROOT: sharedProfile, ...env },
     timeout: 8 * 60 * 1000,
   });
   let report = null;
   try { report = JSON.parse(fs.readFileSync(reportPath, 'utf8')); } catch { /* 보고서 없음 */ }
-  try { fs.rmSync(userData, { recursive: true, force: true }); } catch { /* 무시 */ }
-  if (!report) return { label, error: `보고서가 만들어지지 않았습니다 (종료 코드 ${r.status}, 신호 ${r.signal || '-'})` };
-  return { label, report };
+  if (!report) return { label, userData, error: `보고서가 만들어지지 않았습니다 (종료 코드 ${r.status}, 신호 ${r.signal || '-'})` };
+  return { label, report, userData };
 }
 
-const runs = [
-  run('일반 시작', [], {}),
-  run('자동 실행(--hidden) 시작', ['--hidden'], { CB_SELFTEST_HIDDEN: '1' }),
-];
+const first = run('일반 시작', [], { CB_SELFTEST_SEED: '1' });
+const second = run('별도 앱 프로필 · 자동 실행(--hidden) 시작', ['--hidden'], {
+  CB_SELFTEST_HIDDEN: '1',
+  CB_SELFTEST_EXPECT_SHARED: '1',
+  CB_SELFTEST_EXPECT_DIR: path.join(first.userData || '', 'assets'),
+});
+const runs = [first, second];
 
 const ICON = { pass: '✔', fail: '✘', warn: '△' };
 let failed = 0, warned = 0;
@@ -73,4 +90,6 @@ for (const r of runs) {
   }
 }
 console.log(`\n결과: ${failed ? `실패 ${failed}개` : '모두 통과'}${warned ? ` (경고 ${warned}개)` : ''}`);
+for (const r of runs) if (r.userData) { try { removeVerificationDirectory(r.userData); } catch { /* 무시 */ } }
+try { removeVerificationDirectory(sharedProfile); } catch { /* 무시 */ }
 process.exit(failed ? 1 : 0);

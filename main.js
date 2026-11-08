@@ -7,9 +7,10 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { isSamePhysicalPath, isPathWithin } = require('./store-paths');
 const { Stitcher } = require('./stitch');
 const { openVault } = require('./vault');
-const { migrateIndexedFiles, resolveCaptureDirectory, shouldMigrateIndexedFiles } = require('./store-migration');
+const { migrateIndexedFiles, resolveCaptureDirectory, resolveFallbackDirectory, shouldMigrateIndexedFiles } = require('./store-migration');
 const { createAssetProtocolHandler } = require('./asset-protocol');
 
 protocol.registerSchemesAsPrivileged([{
@@ -17,7 +18,22 @@ protocol.registerSchemesAsPrivileged([{
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
 }]);
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// safeStorage uses Electron's session Local State file, while the process lock follows userData.
+// Point both at one per-Windows-user directory before either facility initializes.
+const packageUserDataDir = app.getPath('userData');
+const sharedProfileDir = path.resolve(process.env.CB_SELFTEST_PROFILE_ROOT || path.join(
+  process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'), 'CaptureBox',
+));
+fs.mkdirSync(sharedProfileDir, { recursive: true });
+app.setPath('userData', sharedProfileDir);
+app.setPath('sessionData', sharedProfileDir);
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (process.env.CB_SELFTEST_LOCK_PROBE === '1') {
+  if (hasSingleInstanceLock && process.env.CB_SELFTEST_LOCK_MARKER) {
+    fs.writeFileSync(process.env.CB_SELFTEST_LOCK_MARKER, 'another instance acquired the shared lock');
+  }
+  process.exit(hasSingleInstanceLock ? 42 : 0);
+} else if (!hasSingleInstanceLock) app.quit();
 
 const MODE_LABEL = { region: '영역', window: '창', fullscreen: '전체 화면', scroll: '스크롤', edit: '편집' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -34,10 +50,12 @@ let settings = { autoCopy: true, clipOnly: false };
 
 let storeError = '';
 let storeReady = false;
+let storeTransition = false;
+let storeInitialization = null;
 const defaultDir = () => process.env.CB_SELFTEST
-  ? path.join(app.getPath('userData'), 'selftest-captures')
+  ? path.join(packageUserDataDir, 'selftest-captures')
   : path.join(app.getPath('pictures'), 'Screenshots');   // 윈도우 스크린샷 폴더
-const legacyDir = () => path.join(app.getPath('userData'), 'assets');         // v1.0.1 이하의 기본 위치
+const legacyDir = () => path.join(packageUserDataDir, 'assets');              // v1.0.1 이하의 기본 위치
 
 function parseSettings(bytes, label) {
   let parsed;
@@ -71,32 +89,20 @@ function parseAssetIndex(bytes, label) {
 async function initStore() {
   storeReady = false;
   assets = [];
-  const userData = app.getPath('userData');
+  const userData = sharedProfileDir;
   temporaryExportsDir = path.join(userData, 'temp-exports');
-  try {
-    const tempInfo = fs.lstatSync(temporaryExportsDir);
-    if (tempInfo.isSymbolicLink()) throw new Error('CaptureBox temporary export path must not be a symbolic link');
-    fs.rmSync(temporaryExportsDir, { recursive: true, force: true });
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw new Error(`CaptureBox temporary exports could not be cleared: ${error.message}`);
-  }
-  fs.mkdirSync(temporaryExportsDir, { recursive: true });
   settingsFile = path.join(userData, 'settings.cbx');
-  legacySettingsFile = path.join(userData, 'settings.json');
-  const profileData = process.env.CB_SELFTEST
-    ? path.join(userData, 'selftest-profile')
-    : (process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'));
-  const vaultDirectory = path.join(profileData, 'CaptureBox');
-  const keyFile = path.join(vaultDirectory, 'vault-key.bin');
-  const stateFile = path.join(vaultDirectory, 'vault-state.bin');
+  legacySettingsFile = path.join(packageUserDataDir, 'settings.json');
+  const keyFile = path.join(userData, 'vault-key.bin');
+  const stateFile = path.join(userData, 'vault-state.bin');
   const legacySettings = !fs.existsSync(settingsFile) && fs.existsSync(legacySettingsFile)
     ? parseSettings(fs.readFileSync(legacySettingsFile), 'Legacy CaptureBox settings')
     : null;
-  const candidates = [legacySettings && legacySettings.assetsDir, defaultDir(), legacyDir()];
+  const candidates = [legacySettings && legacySettings.assetsDir, defaultDir(), legacyDir(), packageUserDataDir];
   const keyMustExist = fs.existsSync(stateFile) || fs.existsSync(settingsFile) || candidates.some(hasEncryptedData);
   vault = await openVault({ safeStorage, keyFile, stateFile, requireExistingKey: keyMustExist });
 
-  // Shared Store/GitHub state is read before applying build-specific encrypted settings.
+  // Store and GitHub builds use one protected state and one encrypted settings file.
   const sharedState = await vault.readState();
   let storedSettings = null;
   if (fs.existsSync(settingsFile)) storedSettings = parseSettings(vault.readFile(settingsFile), 'Encrypted CaptureBox settings');
@@ -106,9 +112,24 @@ async function initStore() {
   const selected = await resolveCaptureDirectory({
     vault,
     legacySettings: sharedState ? null : storedSettings,
-    fallbackDirectory: !sharedState && !storedSettings && fs.existsSync(path.join(legacyDir(), 'index.json')) ? legacyDir() : defaultDir(),
+    fallbackDirectory: resolveFallbackDirectory({
+      legacyDirectory: legacyDir(),
+      defaultDirectory: defaultDir(),
+      legacyIndexExists: !sharedState && fs.existsSync(path.join(legacyDir(), 'index.json')),
+    }),
   });
   assetsDir = selected.directory;
+  if (isPathWithin(assetsDir, temporaryExportsDir)) {
+    throw new Error('The CaptureBox library cannot be inside its temporary export folder');
+  }
+  try {
+    const tempInfo = fs.lstatSync(temporaryExportsDir);
+    if (tempInfo.isSymbolicLink()) throw new Error('CaptureBox temporary export path must not be a symbolic link');
+    fs.rmSync(temporaryExportsDir, { recursive: true, force: true });
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error(`CaptureBox temporary exports could not be cleared: ${error.message}`);
+  }
+  fs.mkdirSync(temporaryExportsDir, { recursive: true });
   fs.mkdirSync(assetsDir, { recursive: true });
   fs.accessSync(assetsDir, fs.constants.W_OK);
   indexFile = path.join(assetsDir, 'index.cbx');
@@ -157,23 +178,39 @@ async function initStore() {
 }
 
 async function retryStore() {
-  try {
-    await initStore();
-  } catch (error) {
-    storeReady = false;
-    assets = [];
-    storeError = String(error && error.message || error).split(/\r?\n/)[0].slice(0, 240);
-  }
-  return storeInfo();
+  if (storeInitialization) return storeInitialization;
+  storeInitialization = (async () => {
+    try {
+      await initStore();
+    } catch (error) {
+      storeReady = false;
+      assets = [];
+      storeError = String(error && error.message || error).split(/\r?\n/)[0].slice(0, 240);
+    }
+    return storeInfo();
+  })().finally(() => { storeInitialization = null; });
+  return storeInitialization;
 }
 
 /* 저장 폴더 변경: 기존 에셋을 새 폴더로 복사(성공 후 원본 삭제)하고, 새 폴더에 있던 에셋과 합친다. */
 async function moveStore(newDir) {
+  assertStoreMutable();
+  if (storeTransition) throw new Error('CaptureBox storage is already being moved');
+  storeTransition = true;
+  try { return await performStoreMove(newDir); }
+  finally { storeTransition = false; }
+}
+
+async function performStoreMove(newDir) {
   assertStoreReady();
+  if (busy) throw new Error('Wait for the current capture to finish before moving the CaptureBox folder');
   newDir = path.resolve(newDir);
-  if (newDir.toLowerCase() === path.resolve(assetsDir).toLowerCase()) return { ok: true };
+  if (isPathWithin(newDir, temporaryExportsDir)) throw new Error('Choose a folder outside the CaptureBox temporary export folder');
+  if (isSamePhysicalPath(newDir, assetsDir)) return { ok: true };
   fs.mkdirSync(newDir, { recursive: true });
-  const oldDir = path.resolve(assetsDir), oldAssets = assets;
+  if (isPathWithin(newDir, temporaryExportsDir)) throw new Error('Choose a folder outside the CaptureBox temporary export folder');
+  if (isSamePhysicalPath(newDir, assetsDir)) return { ok: true };
+  const oldDir = path.resolve(assetsDir), oldAssets = [...assets];
   const destinationIndex = path.join(newDir, 'index.cbx');
   const legacyDestinationIndex = path.join(newDir, 'index.json');
   let existing = [];
@@ -253,18 +290,22 @@ function clearTemporaryExports() {
 }
 const storeInfo = () => ({ ready: storeReady, dir: assetsDir || '', isDefault: !!assetsDir && assetsDir.toLowerCase() === defaultDir().toLowerCase(), error: storeError, count: assets.length });
 const assertStoreReady = () => { if (!storeReady || !vault) throw new Error(storeError || 'CaptureBox 보관함을 먼저 복구해야 합니다'); };
+const assertStoreMutable = () => {
+  assertStoreReady();
+  if (storeTransition) throw new Error('CaptureBox 보관함 폴더를 옮기는 중입니다. 잠시 후 다시 시도해 주세요.');
+};
 const imgPath = (id) => path.join(assetsDir, `${id}.cbx`);
 const thumbPath = (id) => path.join(assetsDir, `${id}.thumb.cbx`);
 const readAsset = (id) => { assertStoreReady(); return vault.readFile(imgPath(id)); };
 const readThumbnail = (id) => { assertStoreReady(); return vault.readFile(thumbPath(id)); };
 const saveIndex = () => {
-  assertStoreReady();
+  assertStoreMutable();
   const bytes = Buffer.from(JSON.stringify(assets, null, 1));
   vault.writeFileAtomic(indexFile, bytes);
   if (!vault.readFile(indexFile).equals(bytes)) throw new Error('Encrypted CaptureBox index failed verification');
 };
 const saveSettings = () => {
-  assertStoreReady();
+  assertStoreMutable();
   const bytes = Buffer.from(JSON.stringify(settings));
   vault.writeFileAtomic(settingsFile, bytes);
   if (!vault.readFile(settingsFile).equals(bytes)) throw new Error('Encrypted CaptureBox settings failed verification');
@@ -296,7 +337,7 @@ function stamp() {
 }
 
 function addAsset(img, mode) {
-  assertStoreReady();
+  assertStoreMutable();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const { width, height } = img.getSize();
   try {
@@ -555,6 +596,10 @@ async function finish(img, mode) {
 }
 
 async function runCapture(mode, delay = 0) {
+  if (storeTransition) {
+    if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: '보관함 폴더를 옮기는 중입니다. 잠시 후 다시 시도해 주세요.' });
+    return false;
+  }
   if (!storeReady) {
     if (win && !win.isDestroyed()) win.webContents.send('assets:changed', { toast: storeError || '보관함을 먼저 복구해 주세요' });
     return false;
@@ -591,13 +636,13 @@ async function runCapture(mode, delay = 0) {
 ipcMain.handle('assets:list', () => storeReady ? assets.map(view) : []);
 ipcMain.handle('settings:get', () => settings);
 ipcMain.handle('settings:set', (_e, patch) => {
-  assertStoreReady();
+  assertStoreMutable();
   const previous = settings;
   settings = { ...settings, ...patch };
   try { saveSettings(); } catch (error) { settings = previous; throw error; }
   return settings;
 });
-ipcMain.handle('capture:start', (_e, mode, delay) => { assertStoreReady(); return runCapture(mode, Number(delay) || 0); });
+ipcMain.handle('capture:start', (_e, mode, delay) => { assertStoreMutable(); return runCapture(mode, Number(delay) || 0); });
 
 ipcMain.handle('windows:list', async () => {
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 420, height: 280 } });
@@ -607,7 +652,7 @@ ipcMain.handle('windows:list', async () => {
 });
 
 ipcMain.handle('capture:window', async (_e, id) => {
-  assertStoreReady();
+  assertStoreMutable();
   const srcs = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 3840, height: 2160 } });
   const s = srcs.find((x) => x.id === id);
   if (!s || s.thumbnail.isEmpty()) return { ok: false, message: '창을 캡처할 수 없습니다 (최소화된 창일 수 있어요)' };
@@ -618,7 +663,7 @@ ipcMain.handle('capture:window', async (_e, id) => {
 });
 
 ipcMain.handle('asset:rename', (_e, id, name) => {
-  assertStoreReady();
+  assertStoreMutable();
   const a = findAsset(id);
   if (a && typeof name === 'string' && name.trim()) {
     const previous = a.name;
@@ -627,7 +672,7 @@ ipcMain.handle('asset:rename', (_e, id, name) => {
   }
 });
 ipcMain.handle('asset:delete', (_e, id) => {
-  assertStoreReady();
+  assertStoreMutable();
   const i = assets.findIndex((a) => a.id === id);
   if (i < 0) return;
   const [removed] = assets.splice(i, 1);
@@ -635,7 +680,7 @@ ipcMain.handle('asset:delete', (_e, id) => {
   for (const f of [imgPath(id), thumbPath(id)]) vault.removeFile(f);
 });
 ipcMain.handle('assets:deleteMany', (_e, ids) => {
-  assertStoreReady();
+  assertStoreMutable();
   const set = new Set(Array.isArray(ids) ? ids : []);
   const gone = assets.filter((a) => set.has(a.id));
   if (!gone.length) return 0;
@@ -648,7 +693,7 @@ ipcMain.handle('assets:deleteMany', (_e, ids) => {
 ipcMain.handle('asset:copy', async (_e, id) => {
   assertStoreReady();
   if (!findAsset(id)) return;
-  try { await copyImage(nativeImage.createFromBuffer(readAsset(id))); }
+  try { await copyImage(nativeImage.createFromBuffer(readAsset(id))); return true; }
   catch (error) { reportAssetError(id, error); return false; }
 });
 ipcMain.handle('asset:save', async (_e, id) => {
@@ -678,7 +723,7 @@ ipcMain.handle('asset:dataUrl', (_e, id) => {
   catch (error) { reportAssetError(id, error); return null; }
 });
 ipcMain.handle('asset:addEdited', (_e, baseId, dataUrl) => {
-  assertStoreReady();
+  assertStoreMutable();
   const img = nativeImage.createFromDataURL(dataUrl);
   if (img.isEmpty()) return null;
   const base = findAsset(baseId);
@@ -775,7 +820,7 @@ ipcMain.handle('store:retry', async () => {
 });
 ipcMain.handle('store:quit', () => { quitting = true; app.quit(); });
 ipcMain.handle('store:choose', async () => {
-  assertStoreReady();
+  assertStoreMutable();
   const r = await dialog.showOpenDialog(win, { title: '저장할 폴더 선택', defaultPath: assetsDir, properties: ['openDirectory', 'createDirectory'] });
   if (r.canceled || !r.filePaths[0]) return { ok: false, canceled: true, ...storeInfo() };
   try { await moveStore(r.filePaths[0]); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
@@ -783,7 +828,7 @@ ipcMain.handle('store:choose', async () => {
   return { ok: true, ...storeInfo() };
 });
 ipcMain.handle('store:reset', async () => {
-  assertStoreReady();
+  assertStoreMutable();
   try { await moveStore(defaultDir()); } catch (e) { return { ok: false, message: e.message, ...storeInfo() }; }
   win.webContents.send('assets:changed', {});
   return { ok: true, ...storeInfo() };
@@ -917,7 +962,7 @@ ipcMain.handle('asset:ocr', async (_e, id) => {
 });
 ipcMain.handle('ocr:get', () => ({ mode: settings.ocrMode || 'precise', preciseAvailable: preciseStatus() }));
 ipcMain.handle('ocr:set', (_e, mode) => {
-  assertStoreReady();
+  assertStoreMutable();
   settings.ocrMode = mode === 'windows' ? 'windows' : 'precise';
   saveSettings();
   return { mode: settings.ocrMode, preciseAvailable: preciseStatus() };
@@ -1016,6 +1061,7 @@ function registerHotkeys() {
 const hotkeyState = () => ({ keys: Object.fromEntries(Object.keys(DEFAULT_KEYS).map((m) => [m, prettyKey(hotkeyOf(m))])), errors: hotkeyErrors });
 ipcMain.handle('hotkeys:get', () => hotkeyState());
 ipcMain.handle('hotkeys:set', (_e, mode, combo) => {
+  assertStoreMutable();
   if (!DEFAULT_KEYS[mode]) return { ok: false, message: '알 수 없는 항목입니다', ...hotkeyState() };
   if (!KEY_RE.test(String(combo))) return { ok: false, message: 'Ctrl, Alt, Shift 중 하나 이상과 일반 키를 함께 눌러 주세요', ...hotkeyState() };
   const accel = String(combo).replace(/^Ctrl/, 'CommandOrControl').replace(/\+Ctrl\b/, '+CommandOrControl');
@@ -1036,6 +1082,7 @@ ipcMain.handle('hotkeys:set', (_e, mode, combo) => {
   return { ok: true, ...hotkeyState() };
 });
 ipcMain.handle('hotkeys:reset', () => {
+  assertStoreMutable();
   delete settings.hotkeys;
   saveSettings();
   registerHotkeys();
@@ -1106,8 +1153,10 @@ function createWindow() {
     e.preventDefault();
     win.hide();
     if (!settings.trayNoticeShown) {
-      settings.trayNoticeShown = true;
-      saveSettings();
+      if (!storeTransition) {
+        settings.trayNoticeShown = true;
+        saveSettings();
+      }
       try { tray.displayBalloon({ title: 'CaptureBox', content: '트레이에서 계속 실행 중입니다. 단축키로 바로 캡처할 수 있어요. 완전히 종료하려면 트레이 아이콘을 우클릭하세요.' }); } catch { /* 무시 */ }
     }
   });
@@ -1133,7 +1182,8 @@ app.whenReady().then(async () => {
   // 설치본 자체 검증 모드: CB_SELFTEST=<리포트 경로> 로 실행하면 핵심 기능을 실제로 돌려 보고서를 쓴다 (npm run verify)
   if (process.env.CB_SELFTEST) {
     setTimeout(() => require('./selftest').run({
-      app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, fs, path,
+      app, screen, BrowserWindow, nativeImage, ipcMain, globalShortcut, clipboard, fs, path,
+      packageUserDataDir, sharedProfileDir,
       get win() { return win; }, get tray() { return tray; }, get assets() { return assets; },
       get assetsDir() { return assetsDir; }, get indexFile() { return indexFile; }, get settingsFile() { return settingsFile; },
       get temporaryExportsDir() { return temporaryExportsDir; }, get vault() { return vault; },
