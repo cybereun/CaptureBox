@@ -69,6 +69,30 @@ exports.run = async (ctx) => {
     return `${ctx.isStore ? 'Store 자동 업데이트 꺼짐' : 'app-update.yml'} · 스크립트·onnxruntime unpacked · OCR 모델 3개 OK`;
   });
 
+  if (process.env.CB_SELFTEST_SEED === '1') {
+    await step('격리된 사용자 데이터 · 레거시 마이그레이션 · 미사용 파일 보존', async () => {
+      const userData = app.getPath('userData');
+      const directory = path.join(userData, 'selftest-legacy-captures');
+      const id = 'verifylegacy01';
+      const status = await H('store:get');
+      if (!status.ready || path.resolve(status.dir) !== path.resolve(directory)) throw new Error(`격리 보관함 경로가 다릅니다: ${JSON.stringify(status)}`);
+      const asset = ctx.assets.find((item) => item.id === id);
+      if (!asset) throw new Error('기존 색인 캡처가 마이그레이션 후 사라졌습니다');
+      const migrated = fs.readFileSync(path.join(directory, `${id}.cbx`));
+      const thumbnail = fs.readFileSync(path.join(directory, `${id}.thumb.cbx`));
+      if (migrated.toString('ascii', 0, 4) !== 'CBX1' || thumbnail.toString('ascii', 0, 4) !== 'CBX1') throw new Error('마이그레이션 이미지/썸네일이 암호화되지 않았습니다');
+      if (!ctx.vault.readFile(path.join(directory, `${id}.cbx`)).equals(fs.readFileSync(path.join(__dirname, 'assets', 'icon.png')))) throw new Error('마이그레이션 이미지 바이트가 원본과 다릅니다');
+      if (fs.existsSync(path.join(directory, `${id}.png`)) || fs.existsSync(path.join(directory, 'index.json'))) throw new Error('검증된 마이그레이션 뒤에 평문 이미지/색인이 남았습니다');
+      if (fs.readFileSync(path.join(directory, 'keep-this-file.txt'), 'utf8') !== 'unindexed user file: keep unchanged') throw new Error('인덱스에 없는 파일이 바뀌었습니다');
+      if (fs.existsSync(path.join(userData, 'settings.json'))) throw new Error('평문 설정 파일이 남았습니다');
+      if (fs.readFileSync(ctx.indexFile).toString('ascii', 0, 4) !== 'CBX1' || fs.readFileSync(ctx.settingsFile).toString('ascii', 0, 4) !== 'CBX1') throw new Error('색인이나 설정이 암호화되지 않았습니다');
+      const stateFile = path.join(userData, 'selftest-profile', 'CaptureBox', 'vault-state.bin');
+      if (fs.readFileSync(stateFile).includes(Buffer.from(directory))) throw new Error('공유 보관함 경로가 평문 상태 파일에 있습니다');
+      if (fs.existsSync(path.join(userData, 'temp-exports', 'leftover.png'))) throw new Error('이전 실행의 임시 평문 이미지가 정리되지 않았습니다');
+      return '앱 전용 사용자 데이터로 업그레이드, 인증된 암호화, 나머지 파일 보존 OK';
+    });
+  }
+
   if (process.env.CB_FORCE_STORE === '1') {
     await step('Store 모드: 자체 업데이트 꺼짐 · 시작 시 자동 실행 꺼짐', async () => {
       if (!ctx.isStore) throw new Error('Store 모드로 인식되지 않았습니다');
@@ -169,6 +193,123 @@ exports.run = async (ctx) => {
         return `${a.width}x${a.height}px 저장`;
       });
     }
+
+    await step('암호화 보관함 · 갤러리 · 편집 · 복사 · 내보내기 · 인쇄 · 드래그', async () => {
+      const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+      let imageUrl;
+      try {
+        await w.loadURL('data:text/html,<body></body>');
+        imageUrl = await w.webContents.executeJavaScript("(function(){const c=document.createElement('canvas');c.width=80;c.height=50;const x=c.getContext('2d');x.fillStyle='#e8f0ff';x.fillRect(0,0,80,50);x.fillStyle='#2054a5';x.fillRect(8,8,32,24);return c.toDataURL('image/png')})()");
+      } finally { w.destroy(); }
+
+      const base = ctx.assets[0] || ctx.addAsset(nativeImage.createFromDataURL(imageUrl), 'edit');
+      const id = await H('asset:addEdited', base.id, imageUrl);
+      if (!id) throw new Error('편집 결과가 새 보관 항목으로 저장되지 않았습니다');
+      const item = ctx.assets.find((asset) => asset.id === id);
+      if (!item || item.width !== 80 || item.height !== 50) throw new Error(`편집 이미지 크기가 다릅니다: ${JSON.stringify(item)}`);
+
+      const imagePath = path.join(ctx.assetsDir, `${id}.cbx`);
+      const thumbPath = path.join(ctx.assetsDir, `${id}.thumb.cbx`);
+      const imageCipher = fs.readFileSync(imagePath), thumbCipher = fs.readFileSync(thumbPath);
+      if (imageCipher.toString('ascii', 0, 4) !== 'CBX1' || thumbCipher.toString('ascii', 0, 4) !== 'CBX1') throw new Error('이미지나 썸네일이 암호화된 CBX 파일이 아닙니다');
+      if (fs.existsSync(path.join(ctx.assetsDir, `${id}.png`)) || fs.existsSync(path.join(ctx.assetsDir, `${id}.thumb.png`))) throw new Error('보관함에 평문 PNG가 남아 있습니다');
+      if (fs.existsSync(path.join(ctx.assetsDir, 'index.json')) || fs.existsSync(path.join(path.dirname(ctx.settingsFile), 'settings.json'))) throw new Error('평문 인덱스 또는 설정 파일이 남아 있습니다');
+      if (fs.readFileSync(ctx.indexFile).toString('ascii', 0, 4) !== 'CBX1' || fs.readFileSync(ctx.settingsFile).toString('ascii', 0, 4) !== 'CBX1') throw new Error('인덱스나 설정 파일이 암호화되지 않았습니다');
+
+      const route = (await H('assets:list')).find((asset) => asset.id === id);
+      if (!route || !route.url.startsWith('capturebox-asset://asset/')) throw new Error('갤러리가 내부 이미지 프로토콜 주소를 쓰지 않습니다');
+      const loaded = await ctx.win.webContents.executeJavaScript(`new Promise(resolve => { const image = new Image(); image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight }); image.onerror = () => resolve({ error: true }); image.src = ${JSON.stringify(route.url)}; })`);
+      if (loaded.width !== 80 || loaded.height !== 50) throw new Error(`갤러리 이미지 프로토콜 로드 실패: ${JSON.stringify(loaded)}`);
+      const decoded = nativeImage.createFromBuffer(ctx.readAsset(id));
+      if (decoded.isEmpty() || decoded.getSize().width !== 80 || decoded.getSize().height !== 50) throw new Error('메인 프로세스 복호화 이미지 크기가 다릅니다');
+
+      const originalCipher = fs.readFileSync(imagePath);
+      try {
+        const corruptedCipher = Buffer.from(originalCipher);
+        corruptedCipher[corruptedCipher.length - 1] ^= 0x80;
+        fs.writeFileSync(imagePath, corruptedCipher);
+        const failedLoad = await ctx.win.webContents.executeJavaScript(`new Promise(resolve => { const image = new Image(); image.onload = () => resolve({ loaded: true }); image.onerror = () => resolve({ loaded: false }); image.src = ${JSON.stringify(`${route.url}&selftest=${Date.now()}`)}; })`);
+        if (failedLoad.loaded || !ctx.assets.some((asset) => asset.id === id)) throw new Error('손상된 이미지를 그대로 성공 처리했거나 색인 항목을 제거했습니다');
+      } finally { fs.writeFileSync(imagePath, originalCipher); }
+
+      await H('asset:copy', id);
+      const clipboard = require('electron').clipboard;
+      const clipboardItems = await clipboard.read();
+      const copiedImage = clipboardItems.find((entry) => entry.types.includes('image/png'));
+      if (!copiedImage) throw new Error('클립보드에 PNG 이미지 항목이 없습니다');
+      const imageBlob = await copiedImage.getType('image/png');
+      const clipboardImage = nativeImage.createFromBuffer(Buffer.from(await imageBlob.arrayBuffer()));
+      if (clipboardImage.isEmpty() || clipboardImage.getSize().width !== 80 || clipboardImage.getSize().height !== 50) throw new Error('클립보드 복사 이미지가 다릅니다');
+
+      const { dialog } = require('electron');
+      const previousDialog = dialog.showSaveDialog;
+      const pngOut = path.join(app.getPath('userData'), 'selftest-export.png');
+      const jpgOut = path.join(app.getPath('userData'), 'selftest-export.jpg');
+      try {
+        dialog.showSaveDialog = async (_window, options) => ({ canceled: false, filePath: options.defaultPath.endsWith('.jpg') ? jpgOut : pngOut });
+        if (!(await H('asset:save', id))) throw new Error('PNG 내보내기가 취소되었습니다');
+        const pngBytes = fs.readFileSync(pngOut);
+        if (!pngBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('내보낸 PNG 시그니처가 잘못되었습니다');
+        dialog.showSaveDialog = async () => ({ canceled: false, filePath: jpgOut });
+        if (!(await H('asset:save', id))) throw new Error('JPEG 내보내기가 취소되었습니다');
+        const jpgBytes = fs.readFileSync(jpgOut);
+        if (jpgBytes[0] !== 0xff || jpgBytes[1] !== 0xd8) throw new Error('내보낸 JPEG 시그니처가 잘못되었습니다');
+      } finally {
+        dialog.showSaveDialog = previousDialog;
+        try { fs.rmSync(pngOut, { force: true }); } catch { /* self-test output only */ }
+        try { fs.rmSync(jpgOut, { force: true }); } catch { /* self-test output only */ }
+      }
+
+      const printResult = await H('asset:print', id);
+      if (!printResult.ok || !printResult.preview) throw new Error('인쇄 미리보기를 열지 못했습니다');
+      let printWindow;
+      for (let n = 0; n < 30 && !printWindow; n++) {
+        printWindow = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed() && candidate.getTitle() === '인쇄 미리보기');
+        if (!printWindow) await sleep(100);
+      }
+      if (!printWindow) throw new Error('인쇄 미리보기 창이 만들어지지 않았습니다');
+      let printImage = { width: 0, height: 0 };
+      for (let n = 0; n < 40 && !printImage.width; n++) {
+        if (!printWindow.isDestroyed() && !printWindow.webContents.isLoading()) {
+          printImage = await printWindow.webContents.executeJavaScript('({ width: document.getElementById("img").naturalWidth, height: document.getElementById("img").naturalHeight })');
+        }
+        if (!printImage.width) await sleep(100);
+      }
+      if (printImage.width !== 80 || printImage.height !== 50) throw new Error(`인쇄 미리보기 이미지가 로드되지 않았습니다: ${JSON.stringify(printImage)}`);
+      printWindow.destroy();
+
+      const { shell } = require('electron');
+      const oldReveal = shell.showItemInFolder;
+      let revealed = '';
+      try {
+        shell.showItemInFolder = (filePath) => { revealed = filePath; };
+        if (!(await H('asset:reveal', id)) || !revealed) throw new Error('탐색기 표시가 임시 내보내기를 만들지 않았습니다');
+        const revealBytes = fs.readFileSync(revealed);
+        if (!revealBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error('탐색기 표시용 파일이 PNG가 아닙니다');
+        let dragOptions;
+        ipcMain.emit('asset:drag', { sender: { startDrag: (options) => { dragOptions = options; } } }, id);
+        if (!dragOptions || !dragOptions.file.startsWith(ctx.temporaryExportsDir)) throw new Error('드래그가 CaptureBox 임시 폴더의 파일을 사용하지 않습니다');
+        if (!fs.existsSync(dragOptions.file)) throw new Error('드래그 임시 파일이 없습니다');
+        ctx.clearTemporaryExports();
+        try {
+          if (fs.existsSync(revealed) || fs.existsSync(dragOptions.file)) throw new Error('임시 파일 정리 후 PNG가 남아 있습니다');
+        } finally { fs.mkdirSync(ctx.temporaryExportsDir, { recursive: true }); }
+      } finally { shell.showItemInFolder = oldReveal; }
+
+      const originalDirectory = ctx.assetsDir;
+      const movedDirectory = path.join(app.getPath('userData'), 'selftest-moved-captures');
+      try {
+        await ctx.moveStore(movedDirectory);
+        if (path.resolve(ctx.storeInfo().dir) !== path.resolve(movedDirectory)) throw new Error('보관함 폴더 변경이 반영되지 않았습니다');
+        if (fs.readFileSync(path.join(movedDirectory, `${id}.cbx`)).toString('ascii', 0, 4) !== 'CBX1') throw new Error('폴더 이동 후 이미지가 암호화 상태가 아닙니다');
+        if (path.resolve((await ctx.vault.readState()).directory) !== path.resolve(movedDirectory)) throw new Error('폴더 이동 후 공유 상태가 바뀌지 않았습니다');
+        await ctx.moveStore(originalDirectory);
+        if (path.resolve(ctx.storeInfo().dir) !== path.resolve(originalDirectory)) throw new Error('보관함을 원래 시험 폴더로 복원하지 못했습니다');
+      } finally {
+        if (path.resolve(ctx.assetsDir) !== path.resolve(originalDirectory)) await ctx.moveStore(originalDirectory);
+      }
+      return '내부 이미지·인쇄 경로, 편집/클립보드, PNG/JPEG 내보내기, 암호화 저장, 임시 드래그/탐색기와 폴더 이동 OK';
+    });
 
     // OCR: 한국어/영어 + 긴 이미지(분할 인식)
     const makeTextImage = async (h, draw) => {

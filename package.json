@@ -1,12 +1,12 @@
 {
   "name": "capturebox",
   "productName": "CaptureBox",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "영역·창·전체·스크롤 캡처와 에셋 보관함",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/stitch.test.js && node test/vault.test.js && node test/store-migration.test.js",
+    "test": "node test/stitch.test.js && node test/vault.test.js && node test/store-migration.test.js && node test/asset-protocol.test.js",
     "dist": "electron-builder --win --publish never",
     "release": "electron-builder --win --publish always",
     "verify": "node scripts/verify.js",
@@ -35,6 +35,7 @@
       "main.js",
       "vault.js",
       "store-migration.js",
+      "asset-protocol.js",
       "preload.js",
       "stitch.js",
       "input.ps1",

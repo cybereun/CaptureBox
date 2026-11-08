@@ -99,6 +99,33 @@ test('shared protected state takes precedence when discovering a custom capture 
   });
 });
 
+test('an already encrypted index can open with a corrupt image so the protocol can report that item', () => {
+  assert.equal(typeof migrationApi.shouldMigrateIndexedFiles, 'function');
+  assert.equal(migrationApi.shouldMigrateIndexedFiles({ encryptedIndexExists: true, legacyIndexExists: false, legacyIndexedFilesExist: false }), false);
+  assert.equal(migrationApi.shouldMigrateIndexedFiles({ encryptedIndexExists: true, legacyIndexExists: false, legacyIndexedFilesExist: true }), true);
+});
+
+test('initializes a new empty encrypted vault and preserves unrelated files', async (t) => {
+  const { directory, vault } = await fixture(t);
+  const unrelated = Buffer.from('keep this file');
+  fs.writeFileSync(path.join(directory, 'notes.txt'), unrelated);
+
+  await migration()({ directory, assets: [], vault });
+
+  assert.deepEqual(vault.readFile(path.join(directory, 'index.cbx')), Buffer.from('[]'));
+  assert.deepEqual(fs.readFileSync(path.join(directory, 'notes.txt')), unrelated);
+});
+
+test('does not replace a corrupt encrypted index without a legacy source', async (t) => {
+  const { directory, vault } = await fixture(t);
+  const corruptIndex = Buffer.from('corrupt encrypted index');
+  fs.writeFileSync(path.join(directory, 'index.cbx'), corruptIndex);
+
+  await assert.rejects(migration()({ directory, assets: [], vault }), /index|corrupt/i);
+
+  assert.deepEqual(fs.readFileSync(path.join(directory, 'index.cbx')), corruptIndex);
+});
+
 test('retries safely when valid encrypted copies coexist with legacy originals', async (t) => {
   const { directory, vault } = await fixture(t);
   const assets = [{ id: idOf(3), name: 'Existing', width: 2, height: 2, createdAt: 1 }];

@@ -92,6 +92,7 @@ async function migrateIndexedFiles({ directory, assets, vault, makeThumbnail }) 
   }
   if (encryptedIndex) verifyLegacyMatches(encryptedIndex, legacyIndex && indexBytes, 'index');
   else if (legacyIndex) writeAndVerify(vault, encryptedIndexPath, indexBytes, 'index');
+  else if (!fs.existsSync(encryptedIndexPath) && assets.length === 0) writeAndVerify(vault, encryptedIndexPath, indexBytes, 'index');
   else throw new Error('CaptureBox index is missing or corrupt');
 
   // No legacy file is removed until every indexed replacement has authenticated and matched.
@@ -116,4 +117,8 @@ async function resolveCaptureDirectory({ vault, legacySettings, fallbackDirector
   return { directory: path.resolve(fallbackDirectory), source: 'default' };
 }
 
-module.exports = { migrateIndexedFiles, resolveCaptureDirectory };
+function shouldMigrateIndexedFiles({ encryptedIndexExists, legacyIndexExists, legacyIndexedFilesExist }) {
+  return !encryptedIndexExists || !!legacyIndexExists || !!legacyIndexedFilesExist;
+}
+
+module.exports = { migrateIndexedFiles, resolveCaptureDirectory, shouldMigrateIndexedFiles };
